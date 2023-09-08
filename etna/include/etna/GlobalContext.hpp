@@ -33,7 +33,8 @@ namespace etna
     vk::Instance getInstance() const { return vkInstance.get(); }
     vk::Queue getQueue() const { return universalQueue; }
     uint32_t getQueueFamilyIdx() const { return universalQueueFamilyIdx; }
-
+    uint32_t getNumFramesInFlight() const { return numFramesInFlight; }
+    
     ShaderProgramManager &getShaderManager() { return shaderPrograms; }
     PipelineManager &getPipelineManager() { return pipelineManager.value(); }
     DescriptorSetLayoutCache &getDescriptorSetLayouts() { return descriptorSetLayouts; }
@@ -60,6 +61,8 @@ namespace etna
 
     DescriptorSetLayoutCache descriptorSetLayouts {}; 
     ShaderProgramManager shaderPrograms {};
+
+    uint32_t numFramesInFlight {};
 
     // Optionals for late init
     std::optional<PipelineManager> pipelineManager;

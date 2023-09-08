@@ -44,6 +44,10 @@ Image::Image(VmaAllocator alloc, CreateInfo info)
   etna::set_debug_name(image, info.name.data());
 }
 
+Image::Image(vk::Image apiImage, CreateInfo info)
+  : allocator{nullptr}, allocation {nullptr}, image{apiImage}, format{info.format}
+{}
+
 void Image::swap(Image& other)
 {
   std::swap(allocator, other.allocator);
@@ -74,7 +78,8 @@ void Image::reset()
     return;
   
   views.clear();
-  vmaDestroyImage(allocator, VkImage(image), allocation);
+  if (allocator && allocation)
+    vmaDestroyImage(allocator, VkImage(image), allocation);
   allocator = {};
   allocation = {};
   image = vk::Image{};

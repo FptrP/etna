@@ -29,6 +29,7 @@ public:
   };
 
   Image(VmaAllocator alloc, CreateInfo info);
+  Image(vk::Image apiImage, CreateInfo info); // for swapchain images
 
   Image(const Image&) = delete;
   Image& operator=(const Image&) = delete;
@@ -45,7 +46,7 @@ public:
   struct ViewParams
   {
     uint32_t baseMip = 0;
-    uint32_t levelCount = 1;
+    uint32_t levelCount = 1; // todo : array layers, apsect mask (depth + stencil is broken)
 
     bool operator==(const ViewParams& b) const = default;
   };
@@ -77,7 +78,7 @@ private:
   VmaAllocator allocator{};
 
   VmaAllocation allocation{};
-  vk::Image image{};
+  vk::Image image{}; //todo: add extent, layers, mips
   vk::Format format;
 };
 

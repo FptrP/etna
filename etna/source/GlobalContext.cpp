@@ -9,7 +9,7 @@
 
 #include <unordered_set>
 #include <vulkan/vulkan_structs.hpp>
-
+#include <string>
 
 namespace etna
 {
@@ -27,6 +27,9 @@ namespace etna
     std::vector<const char*> extensions(
       params.instanceExtensions.begin(), params.instanceExtensions.end());
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    #ifdef DEBUG_NAMES
+    extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    #endif
 
     std::vector<const char*> layers(VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end());
     // Compatibility layer for devices that do not implement this extension natively.
@@ -49,7 +52,7 @@ namespace etna
   {
     std::vector availableExtensions = pdevice.enumerateDeviceExtensionProperties().value;
     
-    std::unordered_set requestedExtensions(extensions.begin(), extensions.end());
+    std::unordered_set<std::string> requestedExtensions(extensions.begin(), extensions.end());
     for (const auto &ext : availableExtensions)
       requestedExtensions.erase(ext.extensionName);
     
@@ -218,6 +221,7 @@ namespace etna
 #endif
 
   GlobalContext::GlobalContext(const InitParams &params)
+    : numFramesInFlight {params.numFramesInFlight}
   {
     // Proper initialization of vulkan is tricky, as we need to
     // dynamically link vulkan-1.dll and load symbols for various
