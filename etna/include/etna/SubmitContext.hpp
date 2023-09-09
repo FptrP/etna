@@ -3,6 +3,7 @@
 #define ETNA_SUBMIT_CONTEXT_HPP_INCLUDED
 
 #include <etna/Image.hpp>
+#include <etna/SyncCommandBuffer.hpp>
 
 #include <memory>
 #include <variant>

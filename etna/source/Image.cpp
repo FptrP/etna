@@ -208,7 +208,6 @@ vk::UniqueImageView Image::createView(vk::ImageViewCreateInfo &&info) const
     info.format = imageInfo.format;
   if (info.subresourceRange.aspectMask == vk::ImageAspectFlags{})
     info.subresourceRange.aspectMask = get_aspeck_mask(info.format);
-  
   auto device = etna::get_context().getDevice();
   return device.createImageViewUnique(info).value;
 }
