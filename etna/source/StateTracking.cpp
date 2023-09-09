@@ -28,7 +28,7 @@ void ResourceStates::setTextureState(vk::CommandBuffer com_buffer, vk::Image ima
     {
       .srcStageMask = oldState.piplineStageFlags,
       .srcAccessMask = oldState.accessFlags,
-      .dstStageMask = newState.piplineStageFlags,
+      .dstStageMask = newState.piplineStageFlags, // AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
       .dstAccessMask = newState.accessFlags,
       .oldLayout = oldState.layout,
       .newLayout = newState.layout,
@@ -37,7 +37,7 @@ void ResourceStates::setTextureState(vk::CommandBuffer com_buffer, vk::Image ima
       .image = image,
       .subresourceRange =
       {
-        .aspectMask = aspect_flags,
+        .aspectMask = aspect_flags, // AAAAAAAAAAAAAAAAAAAAA
         .baseMipLevel = 0,
         .levelCount = 1,
         .baseArrayLayer = 0,

@@ -63,19 +63,15 @@ namespace etna
     std::vector<etna::Image> etnaImages;
     etnaImages.reserve(apiImages.size());
 
-    etna::Image::CreateInfo ImageInfo {
-      .extent = vk::Extent3D{
-        .width = sparams.params.currentExtent.width,
-        .height = sparams.params.currentExtent.height,
-        .depth = 1
-      },
-      .name = "swapchainImage",
-      .format = sparams.imageFmt,
-      .imageUsage = sparams.params.supportedUsageFlags
-    };
-
     for (auto image : apiImages) {
-      etnaImages.push_back(Image {image, ImageInfo}); // proxy texture
+      auto imageInfo = ImageCreateInfo::colorRT(
+        sparams.params.currentExtent.width, 
+        sparams.params.currentExtent.height,
+        sparams.imageFmt,
+        "swapchain_image");
+
+      imageInfo.imageUsage = sparams.params.supportedUsageFlags;
+      etnaImages.push_back(Image {image, std::move(imageInfo)}); // proxy texture
     }
     return etnaImages;
   }

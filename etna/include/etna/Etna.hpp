@@ -54,7 +54,7 @@ namespace etna
 
   
   DescriptorSet create_descriptor_set(DescriptorLayoutId layout, vk::CommandBuffer command_buffer, std::vector<Binding> bindings);
-  Image create_image_from_bytes(Image::CreateInfo info, vk::CommandBuffer command_buffer, const void *data);
+  Image create_image_from_bytes(ImageCreateInfo info, vk::CommandBuffer command_buffer, const void *data);
 
   void set_state(vk::CommandBuffer com_buffer, vk::Image image,
     vk::PipelineStageFlagBits2 pipeline_stage_flag, vk::AccessFlags2 access_flags,

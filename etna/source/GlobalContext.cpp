@@ -302,9 +302,9 @@ namespace etna
     resourceTracking = std::make_unique<ResourceStates>();
   }
   
-  Image GlobalContext::createImage(Image::CreateInfo info)
+  Image GlobalContext::createImage(ImageCreateInfo &&info)
   {
-    return Image(vmaAllocator.get(), info);
+    return Image(vmaAllocator.get(), std::move(info));
   }
 
   Buffer GlobalContext::createBuffer(Buffer::CreateInfo info)

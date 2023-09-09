@@ -25,7 +25,7 @@ namespace etna
     GlobalContext(const struct InitParams &params);
 
   public:
-    Image createImage(Image::CreateInfo info);
+    Image createImage(ImageCreateInfo &&info);
     Buffer createBuffer(Buffer::CreateInfo info);
 
     vk::Device getDevice() const { return vkDevice.get(); }

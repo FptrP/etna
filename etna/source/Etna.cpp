@@ -62,7 +62,7 @@ namespace etna
     return set;
   }
 
-  Image create_image_from_bytes(Image::CreateInfo info, vk::CommandBuffer command_buffer, const void *data)
+  Image create_image_from_bytes(ImageCreateInfo info, vk::CommandBuffer command_buffer, const void *data)
   {
     const auto block_size = vk::blockSize(info.format);
     const auto image_size = block_size * info.extent.width * info.extent.height * info.extent.depth;
@@ -85,7 +85,7 @@ namespace etna
     vkBeginCommandBuffer(command_buffer, &beginInfo);
 
     info.imageUsage |= vk::ImageUsageFlagBits::eTransferDst;
-    auto image = g_context->createImage(info);
+    auto image = g_context->createImage(ImageCreateInfo{info});
     etna::set_state(command_buffer, image.get(), vk::PipelineStageFlagBits2::eTransfer,
       vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eTransferDstOptimal,
       image.getAspectMaskByFormat());
@@ -99,7 +99,7 @@ namespace etna
     region.imageSubresource.aspectMask = (VkImageAspectFlags)image.getAspectMaskByFormat();
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = static_cast<uint32_t>(info.layers);
+    region.imageSubresource.layerCount = static_cast<uint32_t>(info.arrayLayers);
 
     region.imageOffset = {0, 0, 0};
     region.imageExtent = info.extent;
