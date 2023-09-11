@@ -24,9 +24,9 @@ namespace etna
 
     ~SimpleSubmitContext();
 
-    vk::CommandBuffer acquireNextCmd();    
+    SyncCommandBuffer &acquireNextCmd();    
 
-    SwapchainState submitCmd(vk::CommandBuffer, bool present);
+    SwapchainState submitCmd(SyncCommandBuffer &cmd, bool present);
     std::tuple<Image*, SwapchainState> acquireBackbuffer(); // image is nullptr if SwapchainState is OutOfDate
     
     void recreateSwapchain(vk::Extent2D resolution); // 1) synchoronization required
@@ -36,11 +36,13 @@ namespace etna
 
     uint32_t getBackbuffersCount() const { return swapchainImages.size(); }
     uint32_t getFramesInFlight() const { return commandBuffers.size(); }
-
+    vk::Format getSwapchainFmt() const { return swapchainFormat; }
+    
   private:
     vk::UniqueSurfaceKHR surface;
     vk::UniqueSwapchainKHR swapchain;
-    
+    vk::Format swapchainFormat;
+
     std::vector<Image> swapchainImages;
     std::vector<vk::UniqueSemaphore> imageAcquireSemaphores;
     std::vector<vk::UniqueSemaphore> renderFinishedSemaphores;
@@ -49,7 +51,7 @@ namespace etna
     uint32_t semaphoreIndex = 0u;
 
     vk::UniqueCommandPool commandPool;
-    std::vector<vk::UniqueCommandBuffer> commandBuffers;
+    std::vector<SyncCommandBuffer> commandBuffers;
     std::vector<vk::UniqueFence> cmdReadyFences;
 
     uint32_t cmdIndex = 0;    

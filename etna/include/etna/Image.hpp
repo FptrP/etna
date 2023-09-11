@@ -47,6 +47,34 @@ public:
     vk::SampleCountFlagBits samples, std::string_view name = "");
 };
 
+struct Image;
+
+struct ImageView
+{
+  ImageView(const Image &img, vk::ImageSubresourceRange range_, vk::ImageView view_)
+    : owner {img}, range{range_}, view{view_} {}
+
+  explicit operator vk::ImageView() const
+  {
+    return view;
+  }
+  
+  vk::ImageSubresourceRange getRange() const
+  {
+    return range;
+  }
+
+  const Image &getOwner() const
+  {
+    return owner;
+  }
+
+private:
+  const Image &owner; // shared_ptr<> when :(
+  vk::ImageSubresourceRange range;
+  vk::ImageView view;
+};
+
 class Image
 {
 public:
@@ -83,7 +111,7 @@ public:
   };
 
   vk::UniqueImageView createView(vk::ImageViewCreateInfo &&info) const; // For missed features
-  vk::ImageView getView(ViewParams params) const;
+  ImageView getView(ViewParams params) const;
 
   ImageBinding genBinding(vk::Sampler sampler, vk::ImageLayout layout, 
     ViewParams params = ViewParams{}) const;
@@ -112,7 +140,11 @@ private:
     }
   };
 
-  mutable std::unordered_map<ViewParams, vk::UniqueImageView, ViewParamsHasher> views;
+  mutable std::unordered_map<
+    ViewParams, 
+    std::tuple<vk::ImageSubresourceRange, vk::UniqueImageView>,
+    ViewParamsHasher>  views;
+  
   VmaAllocator allocator{};
 
   VmaAllocation allocation{};

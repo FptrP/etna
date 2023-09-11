@@ -212,7 +212,7 @@ vk::UniqueImageView Image::createView(vk::ImageViewCreateInfo &&info) const
   return device.createImageViewUnique(info).value;
 }
 
-vk::ImageView Image::getView(Image::ViewParams params) const
+ImageView Image::getView(Image::ViewParams params) const
 {
   if (params.aspect == vk::ImageAspectFlags{})
     params.aspect = getAspectMaskByFormat();
@@ -221,16 +221,27 @@ vk::ImageView Image::getView(Image::ViewParams params) const
   
   if (it == views.end())
   {
-    auto apiView = createView(params.toVkInfo());
-    it = views.emplace(params, std::move(apiView)).first;
+    auto info = params.toVkInfo();
+    auto range = info.subresourceRange;
+    auto apiView = createView(std::move(info));
+    it = views.emplace(params, std::make_tuple(range, std::move(apiView))).first;
   }
 
-  return views[params].get();
+  return ImageView{*this, std::get<0>(views[params]), std::get<1>(views[params]).get()};
 }
 
 ImageBinding Image::genBinding(vk::Sampler sampler, vk::ImageLayout layout, ViewParams params) const
 {
-  return ImageBinding{*this, vk::DescriptorImageInfo {sampler, getView(params), layout}};
+  auto view = getView(params);
+  return ImageBinding{
+    *this, 
+    view.getRange(), 
+    vk::DescriptorImageInfo {
+      sampler, 
+      vk::ImageView(view),
+      layout
+    }
+  };
 }
 
 }

@@ -18,6 +18,7 @@ namespace etna
   struct ImageBinding
   {
     const Image &image;
+    vk::ImageSubresourceRange range; // for correct barriers
     vk::DescriptorImageInfo descriptor_info;
   };
 }

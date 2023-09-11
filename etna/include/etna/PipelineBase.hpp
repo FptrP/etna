@@ -21,6 +21,11 @@ public:
   PipelineBase(PipelineBase&&) noexcept;
   PipelineBase& operator=(PipelineBase&&) noexcept;
 
+  ShaderProgramId getShaderProgram() const
+  {
+    return id;
+  }
+
 protected:
   PipelineBase(PipelineManager* owner, PipelineId inId, ShaderProgramId inShaderProgramId);
   PipelineBase() = default;

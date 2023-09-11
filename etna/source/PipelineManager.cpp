@@ -68,7 +68,6 @@ vk::UniquePipeline createGraphicsPipelineInternal(
   vertexInput.setVertexAttributeDescriptions(vertexAttribures);
   vertexInput.setVertexBindingDescriptions(vertexBindings);
 
-
   vk::PipelineViewportStateCreateInfo viewportState
   {
     .viewportCount = 1,

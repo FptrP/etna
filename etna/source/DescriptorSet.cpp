@@ -1,6 +1,7 @@
 #include <etna/GlobalContext.hpp>
 #include <etna/DescriptorSet.hpp>
 #include <etna/Etna.hpp>
+#include <etna/SyncCommandBuffer.hpp>
 
 #include <array>
 #include <vector>
@@ -67,7 +68,7 @@ namespace etna
       flip();
   }
     
-  DescriptorSet DynamicDescriptorPool::allocateSet(DescriptorLayoutId layoutId, std::vector<Binding> bindings, vk::CommandBuffer command_buffer)
+  DescriptorSet DynamicDescriptorPool::allocateSet(DescriptorLayoutId layoutId, std::vector<Binding> bindings)
   {
     auto &dslCache = get_context().getDescriptorSetLayouts();
     auto setLayouts = {dslCache.getVkLayout(layoutId)};
@@ -78,7 +79,7 @@ namespace etna
 
     vk::DescriptorSet vkSet {};
     ETNA_ASSERT(vkDevice.allocateDescriptorSets(&info, &vkSet) == vk::Result::eSuccess);
-    return DescriptorSet {flipsCount, layoutId, vkSet, std::move(bindings), command_buffer};
+    return DescriptorSet {flipsCount, layoutId, vkSet, std::move(bindings)};
   }
 
   static bool is_image_resource(vk::DescriptorType dsType)
@@ -202,55 +203,91 @@ namespace etna
     get_context().getDevice().updateDescriptorSets(writes, {});
   }
 
-  static vk::PipelineStageFlagBits2 shader_stage_to_pipeline_stage(vk::ShaderStageFlags shader_stages)
+  static vk::PipelineStageFlags2 shader_stage_to_pipeline_stage(vk::ShaderStageFlags shader_stages)
   {
-    const uint32_t MAPPING_LENGTH = 1;
-    const std::array<vk::ShaderStageFlagBits, MAPPING_LENGTH> shaderStages = {
-      vk::ShaderStageFlagBits::eFragment,
-    };
-    const std::array<vk::PipelineStageFlagBits2, MAPPING_LENGTH> pipelineStages = {
-      vk::PipelineStageFlagBits2::eFragmentShader,
-    };
-    for (int i = 0; i < MAPPING_LENGTH; ++i)
+    constexpr std::tuple<vk::ShaderStageFlagBits, vk::PipelineStageFlagBits2> mapping[]
     {
-      if (shaderStages[i] & shader_stages)
-        return pipelineStages[i];
+      {vk::ShaderStageFlagBits::eVertex, vk::PipelineStageFlagBits2::eVertexShader},
+      {vk::ShaderStageFlagBits::eFragment, vk::PipelineStageFlagBits2::eFragmentShader},
+      {vk::ShaderStageFlagBits::eCompute, vk::PipelineStageFlagBits2::eComputeShader},
+      {vk::ShaderStageFlagBits::eGeometry, vk::PipelineStageFlagBits2::eGeometryShader},
+      {vk::ShaderStageFlagBits::eTessellationControl, vk::PipelineStageFlagBits2::eTessellationControlShader},
+      {vk::ShaderStageFlagBits::eTessellationEvaluation, vk::PipelineStageFlagBits2::eTessellationEvaluationShader},
+      {vk::ShaderStageFlagBits::eMeshEXT, vk::PipelineStageFlagBits2::eMeshShaderEXT}
+    };
+
+    vk::PipelineStageFlags2 flags{};
+
+    for (const auto &[shaderFlag, pipelineFlag] : mapping)
+    {
+      if (shader_stages & shaderFlag)
+        flags |= pipelineFlag;
     }
-    return vk::PipelineStageFlagBits2::eNone;
+    return flags;
   }
 
-  static vk::AccessFlagBits2 descriptor_type_to_access_flag(vk::DescriptorType decriptor_type)
+  static vk::AccessFlags2 descriptor_type_to_access_flag(vk::DescriptorType descriptor_type)
   {
-    const uint32_t MAPPING_LENGTH = 1;
-    const std::array<vk::DescriptorType, MAPPING_LENGTH> descritorTypes = {
-      vk::DescriptorType::eSampledImage,
-    };
-    const std::array<vk::AccessFlagBits2, MAPPING_LENGTH> accessFlags = {
-      vk::AccessFlagBits2::eShaderRead,
-    };
-    for (int i = 0; i < MAPPING_LENGTH; ++i)
+    constexpr std::tuple<vk::DescriptorType, vk::AccessFlags2> mapping[]
     {
-      if (descritorTypes[i] == decriptor_type)
-        return accessFlags[i];
+      {vk::DescriptorType::eSampler, {}},
+      {vk::DescriptorType::eSampledImage, vk::AccessFlagBits2::eShaderSampledRead},
+      {vk::DescriptorType::eCombinedImageSampler, vk::AccessFlagBits2::eShaderSampledRead},
+      {vk::DescriptorType::eUniformTexelBuffer, vk::AccessFlagBits2::eShaderSampledRead},
+
+      {vk::DescriptorType::eUniformBuffer, vk::AccessFlagBits2::eUniformRead},
+      {vk::DescriptorType::eUniformBufferDynamic, vk::AccessFlagBits2::eUniformRead},
+
+      //one flag may be ok here. TODO : more info about bindings
+      {vk::DescriptorType::eStorageBuffer, vk::AccessFlagBits2::eShaderStorageRead|vk::AccessFlagBits2::eShaderStorageWrite},
+      {vk::DescriptorType::eStorageBufferDynamic, vk::AccessFlagBits2::eShaderStorageRead|vk::AccessFlagBits2::eShaderStorageWrite},
+      {vk::DescriptorType::eStorageImage, vk::AccessFlagBits2::eShaderStorageRead|vk::AccessFlagBits2::eShaderStorageWrite},
+      {vk::DescriptorType::eStorageTexelBuffer, vk::AccessFlagBits2::eShaderStorageRead|vk::AccessFlagBits2::eShaderStorageWrite},
+
+      {vk::DescriptorType::eInputAttachment, vk::AccessFlagBits2::eInputAttachmentRead}
+      
+      //TODO: acceleration structures
+    };
+
+    for (auto [desc, access] : mapping)
+    {
+      if (desc == descriptor_type)
+        return access;
     }
-    return vk::AccessFlagBits2::eNone;
+    return {};
   }
 
-  void DescriptorSet::processBarriers() const
+  void DescriptorSet::requestStates(CmdBufferTrackingState &state) const
   {
     auto &layoutInfo = get_context().getDescriptorSetLayouts().getLayoutInfo(layoutId);
     for (auto &binding : bindings)
     {
-      if (std::get_if<ImageBinding>(&binding.resources) == nullptr)
-        continue; // Add processing for buffer here if you need.
-
       auto &bindingInfo = layoutInfo.getBinding(binding.binding);
-      const ImageBinding &imgData = std::get<ImageBinding>(binding.resources);
-      etna::set_state(command_buffer, imgData.image.get(),
-        shader_stage_to_pipeline_stage(bindingInfo.stageFlags),
-        descriptor_type_to_access_flag(bindingInfo.descriptorType),
-        imgData.descriptor_info.imageLayout,
-        imgData.image.getAspectMaskByFormat());
+
+      if (auto image = std::get_if<ImageBinding>(&binding.resources))
+      {
+        state.requestState(
+          image->image, 
+          image->range.baseMipLevel, 
+          image->range.levelCount,
+          image->range.baseArrayLayer,
+          image->range.layerCount,
+          ImageSubresState {
+            .activeStages = shader_stage_to_pipeline_stage(bindingInfo.stageFlags),
+            .activeAccesses = descriptor_type_to_access_flag(bindingInfo.descriptorType),
+            .layout = image->descriptor_info.imageLayout
+          });
+      }
+      else if (auto buffer = std::get_if<BufferBinding>(&binding.resources))
+      {
+        state.requestState(
+          buffer->buffer,
+          CmdBufferTrackingState::BufferState {
+            .activeStages = shader_stage_to_pipeline_stage(bindingInfo.stageFlags),
+            .activeAccesses = descriptor_type_to_access_flag(bindingInfo.descriptorType)
+          });
+      }
     }
+
   }
 }

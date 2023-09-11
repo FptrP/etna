@@ -317,5 +317,10 @@ namespace etna
     return *resourceTracking;
   }
 
+  QueueTrackingState &GlobalContext::getQueueTrackingState()
+  {
+    return queueTracking;
+  }
+
   GlobalContext::~GlobalContext() = default;
 }

@@ -33,8 +33,6 @@ public:
   void setDepthTarget(vk::CommandBuffer com_buffer, vk::Image image);
 
   void flushBarriers(vk::CommandBuffer com_buf);
-
-  void onFenceWait(vk::CommandBuffer cmd_buffer); //
 };
 
 }

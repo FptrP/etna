@@ -164,6 +164,11 @@ namespace etna
     auto cmdPool = create_command_pool();
     std::vector<vk::UniqueCommandBuffer> cmdBuffers = allocate_main_cmd(*cmdPool, framesInFlight); 
     
+    std::vector<SyncCommandBuffer> syncCmd;
+    syncCmd.reserve(cmdBuffers.size());
+    for (auto &elem : cmdBuffers)
+      syncCmd.emplace_back(std::move(elem));
+
     std::vector<vk::UniqueFence> cmdFence;
     cmdFence.reserve(framesInFlight);
 
@@ -173,34 +178,47 @@ namespace etna
     auto ctx = SimpleSubmitContext::createEmpty();
     ctx->surface = vk::UniqueSurfaceKHR{surface, etna::get_context().getInstance()};
     ctx->swapchain = std::move(swapchain);
+    ctx->swapchainFormat = swapchainInfo->imageFmt;
     ctx->swapchainImages = std::move(swapchainImages);
     ctx->imageAcquireSemaphores = std::move(acquireSem);
     ctx->renderFinishedSemaphores = std::move(submitSem);
     ctx->commandPool = std::move(cmdPool);
-    ctx->commandBuffers = std::move(cmdBuffers);
+    ctx->commandBuffers = std::move(syncCmd);
     ctx->cmdReadyFences = std::move(cmdFence);
     return ctx; 
   }
 
   
-  vk::CommandBuffer SimpleSubmitContext::acquireNextCmd()
+  SyncCommandBuffer &SimpleSubmitContext::acquireNextCmd()
   {
     ETNA_ASSERTF(!cmdAcquired, \
       "command buffer is already acquired. Submit it before acquiring next");
-
+    
     auto device = etna::get_context().getDevice();
     device.waitForFences({*cmdReadyFences[cmdIndex]}, VK_TRUE, ~0ull);
-    commandBuffers[cmdIndex]->reset();
+    
+    const uint32_t prevCmdId = (cmdIndex + getFramesInFlight() - 1) % getFramesInFlight();
+    
+    auto &cmdBuffer = commandBuffers[cmdIndex];  
+    auto &prevCmd = commandBuffers[prevCmdId];
+
+    cmdBuffer.reset();
+    
+    etna::get_context().getQueueTrackingState()
+      .setExpectedStates(cmdBuffer.getTrackingState());
+    
+
     device.resetFences({*cmdReadyFences[cmdIndex]});
     cmdAcquired = true;
-    return *commandBuffers[cmdIndex];
+    
+    return cmdBuffer;
   }   
     
-  SwapchainState SimpleSubmitContext::submitCmd(vk::CommandBuffer cmd, bool present)
+  SwapchainState SimpleSubmitContext::submitCmd(SyncCommandBuffer &cmd, bool present)
   {
     ETNA_ASSERTF(!present || currentBackbuffer.has_value(), \
       "Presentation is requested, but backbuffer is not acquired");
-    ETNA_ASSERT(cmd == *commandBuffers[cmdIndex]);
+    ETNA_ASSERT(cmd.get() == commandBuffers[cmdIndex].get());
 
     auto queue = etna::get_context().getQueue();
 
@@ -223,6 +241,10 @@ namespace etna
     }
 
     queue.submit({submit}, *cmdReadyFences[cmdIndex]);
+
+    etna::get_context().getQueueTrackingState()
+      .onSubmit(commandBuffers[cmdIndex].getTrackingState());
+
     cmdAcquired = false;
     cmdIndex = (cmdIndex + 1) % getFramesInFlight();
 
@@ -289,6 +311,7 @@ namespace etna
 
     swapchain = std::move(newSwapchain);
     swapchainImages = get_swapchain_images(*swapchain, *swapchainInfo); 
+    swapchainFormat = swapchainInfo->imageFmt;
     ETNA_ASSERT(swapchainImages.size() == imageAcquireSemaphores.size()); //Recreate semaphores?
   }
 

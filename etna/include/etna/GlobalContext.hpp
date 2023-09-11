@@ -9,6 +9,7 @@
 #include <etna/DescriptorSet.hpp>
 #include <etna/Image.hpp>
 #include <etna/Buffer.hpp>
+#include <etna/SyncCommandBuffer.hpp>
 
 #include <vk_mem_alloc.h>
 #include <optional>
@@ -45,7 +46,8 @@ namespace etna
     ~GlobalContext();
 
     ResourceStates &getResourceTracker();
-
+    QueueTrackingState &getQueueTrackingState();
+    
   private:
     vk::UniqueInstance vkInstance {};
     vk::UniqueDebugUtilsMessengerEXT vkDebugCallback {};
@@ -69,6 +71,7 @@ namespace etna
     std::optional<DynamicDescriptorPool> descriptorPool;
 
     std::unique_ptr<ResourceStates> resourceTracking;
+    QueueTrackingState queueTracking;
   };
 
   GlobalContext &get_context();
