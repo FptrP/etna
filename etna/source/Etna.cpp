@@ -69,7 +69,6 @@ namespace etna
       .size = image_size, 
       .bufferUsage = vk::BufferUsageFlagBits::eTransferSrc,
       .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY,
-      .name = "tmp_staging_buf"
     });
 
     auto *mapped_mem = staging_buf.map();

@@ -198,6 +198,8 @@ namespace etna
     auto device = etna::get_context().getDevice();
     device.waitForFences({*cmdReadyFences[cmdIndex]}, VK_TRUE, ~0ull);
     
+    etna::flip_descriptor_pool();
+
     auto &cmdBuffer = commandBuffers[cmdIndex];  
 
     cmdBuffer.reset();
@@ -230,8 +232,6 @@ namespace etna
       ETNA_ASSERT(res == vk::Result::eSuccess);
     }
     
-    etna::flip_descriptor_pool();
-   
     cmdAcquired = false;
     cmdIndex = (cmdIndex + 1) % getFramesInFlight();
 
