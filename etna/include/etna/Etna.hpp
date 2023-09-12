@@ -6,6 +6,7 @@
 #include <etna/ShaderProgram.hpp>
 #include <etna/DescriptorSet.hpp>
 #include <etna/Image.hpp>
+#include <etna/SyncCommandBuffer.hpp>
 
 #include <optional>
 #include <vector>
@@ -38,7 +39,7 @@ namespace etna
   void initialize(const InitParams &params);
   void shutdown();
   
-  void submit();
+  void flip_descriptor_pool();
 
   ShaderProgramId create_program(const std::string &name, const std::vector<std::string> &shaders_path);
   
@@ -54,14 +55,7 @@ namespace etna
 
   DescriptorSet create_descriptor_set(DescriptorLayoutId layout, std::vector<Binding> bindings);
 
-  Image create_image_from_bytes(ImageCreateInfo info, vk::CommandBuffer command_buffer, const void *data);
-
-  void set_state(vk::CommandBuffer com_buffer, vk::Image image,
-    vk::PipelineStageFlagBits2 pipeline_stage_flag, vk::AccessFlags2 access_flags,
-    vk::ImageLayout layout, vk::ImageAspectFlags aspect_flags);
-
-  void finish_frame(vk::CommandBuffer com_buffer);
-  void flush_barriers(vk::CommandBuffer com_buffer);
+  Image create_image_from_bytes(ImageCreateInfo info, SyncCommandBuffer &command_buffer, const void *data);
 }
 
 #endif // ETNA_ETNA_HPP_INCLUDED

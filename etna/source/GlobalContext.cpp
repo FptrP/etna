@@ -1,5 +1,4 @@
 #include "etna/ShaderProgram.hpp"
-#include "StateTracking.hpp"
 #include <etna/GlobalContext.hpp>
 #include <etna/Etna.hpp>
 #include <etna/Assert.hpp>
@@ -299,7 +298,6 @@ namespace etna
     pipelineManager.emplace(vkDevice.get(), shaderPrograms);
     descriptorPool.emplace(vkDevice.get(), params.numFramesInFlight);
 
-    resourceTracking = std::make_unique<ResourceStates>();
   }
   
   Image GlobalContext::createImage(ImageCreateInfo &&info)
@@ -310,11 +308,6 @@ namespace etna
   Buffer GlobalContext::createBuffer(Buffer::CreateInfo info)
   {
     return Buffer(vmaAllocator.get(), info);
-  }
-
-  ResourceStates &GlobalContext::getResourceTracker()
-  {
-    return *resourceTracking;
   }
 
   QueueTrackingState &GlobalContext::getQueueTrackingState()

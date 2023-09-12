@@ -2,180 +2,20 @@
 #ifndef ETNA_SYNC_COMMAND_BUFFER_INCLUDED
 #define ETNA_SYNC_COMMAND_BUFFER_INCLUDED
 
-#include <etna/Image.hpp>
-#include <etna/Buffer.hpp>
+#include <etna/ResourceTracking.hpp>
 #include <etna/GraphicsPipeline.hpp>
 #include <etna/ComputePipeline.hpp>
 
 namespace etna
 {
-
-struct CmdBarrier
-{
-  std::optional<vk::MemoryBarrier2> memoryBarrier;
-  std::vector<vk::ImageMemoryBarrier2> imageBarriers;
-
-  void flush(vk::CommandBuffer cmd);
-  void clear()
-  {
-    memoryBarrier = std::nullopt;
-    imageBarriers.clear();
-  }
-};
-
-struct CmdBufferTrackingState
-{
-  struct ImageState
-  {
-    struct SubresourceState
-    {
-      vk::PipelineStageFlags2 activeStages {};
-      vk::AccessFlags2 activeAccesses {};
-      vk::ImageLayout layout {vk::ImageLayout::eUndefined};
-
-      bool operator==(const SubresourceState &) const = default;
-    };
-
-    ImageState(const Image &image)
-      : resource {image.get()}, aspect {image.getAspectMaskByFormat()}, 
-        mipLevels {image.getInfo().mipLevels},
-        arrayLayers{image.getInfo().arrayLayers}
-    {
-      states.resize(mipLevels * arrayLayers, {});
-    }
-
-    ImageState(vk::Image img_, vk::ImageAspectFlags aspect_, uint32_t mips_, uint32_t layers_)
-      : resource {img_}, aspect{aspect_}, mipLevels{mips_}, arrayLayers{layers_}
-    {
-      states.resize(mipLevels * arrayLayers, {});
-    }
-
-    std::optional<SubresourceState> &getSubresource(uint32_t mip, uint32_t layer)
-    {
-      uint32_t index = layer * mipLevels + mip; 
-      ETNA_ASSERT(index < mipLevels * arrayLayers);
-      return states.at(index);
-    }
-
-    vk::Image resource {};
-    vk::ImageAspectFlags aspect{};
-    uint32_t mipLevels = 1;
-    uint32_t arrayLayers = 1;
-    std::vector<std::optional<SubresourceState>> states; //mips x layers
-  };
-
-  struct BufferState // generates only memory barriers
-  {
-    vk::PipelineStageFlags2 activeStages {};
-    vk::AccessFlags2 activeAccesses {};
-
-    bool operator==(const BufferState &) const = default;
-  };
-
-  using HandleT = uint64_t; // TODO: we definetly get a situation, when resource is deleted
-  // but it's Handle is still in TrackingState. Any new resource can get the same handle.
-  // The best way is to add 64-bit  id to each resource that are always increasing 
-  using ResContainer = std::unordered_map<HandleT, std::variant<ImageState, BufferState>>;
-
-  CmdBufferTrackingState() {}
-
-
-
-  //Sets resource state. 
-  void expectState(const Image &image, uint32_t mip, uint32_t layer, ImageState::SubresourceState state);
-  void expectState(const Buffer &buffer, BufferState state);
-  
-  void initResourceStates(const ResContainer &states);
-  void initResourceStates(ResContainer &&states);
-
-  //requests transition to new state
-  void requestState(const Image &image, uint32_t mip, uint32_t layer, ImageState::SubresourceState state);
-  void requestState(const Image &image, uint32_t firstMip, uint32_t mipCount, 
-    uint32_t firstLayer, uint32_t layerCount, ImageState::SubresourceState state);
-  // for now range.aspectMask is ignored
-  void requestState(const Image &image, vk::ImageSubresourceRange range, ImageState::SubresourceState state);
-
-  void requestState(const Buffer &buffer, BufferState state);
-
-  void flushBarrier(CmdBarrier &barrier);
-
-  void onSync(); //sets all activeStages and accesses to zero, saves image layouts
-  void removeUnusedResources();
-
-  ResContainer takeStates()
-  {
-    ResContainer out {};
-    std::swap(resources, out);
-    return out;
-  }
-
-  const ResContainer &getStates() const
-  {
-    return resources;
-  }
-
-  const ResContainer &getExpectedStates() const
-  {
-    return expectedResources;
-  }
-
-  void clearExpectedStates()
-  {
-    expectedResources.clear();
-  }
-
-  void clearAll()
-  {
-    expectedResources.clear();
-    resources.clear();
-    requests.clear();
-  }
-
-private:
-  BufferState &acquireResource(HandleT handle);
-  ImageState::SubresourceState &acquireResource(HandleT handle, 
-    const ImageState &request_state, uint32_t mip, uint32_t layer);
-
-
-  static std::optional<vk::ImageMemoryBarrier2> genBarrier(vk::Image img,
-    vk::ImageAspectFlags aspect,
-    uint32_t mip,
-    uint32_t layer,
-    ImageState::SubresourceState &src,
-    const ImageState::SubresourceState &dst);
-
-  static void genBarrier(std::optional<vk::MemoryBarrier2> &barrier,
-    BufferState &src,
-    const BufferState &dst);
-
-  //ResContainer expectedState;
-  //<Something> acquiredState
-  ResContainer expectedResources; //for validation on submit
-  ResContainer resources; //TODO: store expected states in separate ResContainer
-  ResContainer requests;
-};
-
-struct QueueTrackingState
-{
-  void onWait(); //clears all activeStages/activeAccesses
-  void onSubmit(CmdBufferTrackingState &state); //validates expected resources, updates currentState
-  
-  //TODO: 
-  bool isResourceUsed(const Buffer &buffer) const;
-  bool isResourceUsed(const Image &image, uint32_t mip, uint32_t layer) const;
-  
-  void setExpectedStates(CmdBufferTrackingState &state) const //reads current states from queue
-  {
-    state.initResourceStates(currentStates);
-  }
-
-private:
-  CmdBufferTrackingState::ResContainer currentStates;
-};
-
-using ImageSubresState = CmdBufferTrackingState::ImageState::SubresourceState;
-
 struct DescriptorSet;
+
+struct SubmitInfo
+{
+  std::vector<vk::Semaphore> waitSemaphores;
+  std::vector<vk::PipelineStageFlags> waitDstStageMask;
+  std::vector<vk::Semaphore> signalSemaphores;
+};
 
 struct RenderingAttachment
 {
@@ -217,9 +57,11 @@ struct SyncCommandBuffer
     return trackingState;
   }
 
-
   void clearColorImage(const Image &image, vk::ImageLayout layout, 
     vk::ClearColorValue clear_color, vk::ArrayProxy<vk::ImageSubresourceRange> ranges);
+
+  void copyBufferToImage(const Buffer &src, const Image &dst, vk::ImageLayout dstLayout,
+    const vk::ArrayProxy<vk::BufferImageCopy> &regions);
 
   void transformLayout(const Image &image, vk::ImageLayout layout, vk::ImageSubresourceRange range);
 
@@ -256,37 +98,23 @@ struct SyncCommandBuffer
     bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
   }
 
-  CmdBufferTrackingState::ResContainer takeResourceStates()
-  {
-    return trackingState.takeStates();
-  }
-
-  const CmdBufferTrackingState::ResContainer &getResourceStates() const
-  {
-    return trackingState.getStates();
-  }
-
-  void initResourceStates(const CmdBufferTrackingState::ResContainer &resources)
-  {
-    trackingState.initResourceStates(resources);
-  }
-
-  void initResourceStates(CmdBufferTrackingState::ResContainer &&resources)
-  {
-    trackingState.initResourceStates(std::move(resources));
-  }
-
-  void onSync()
-  {
-    trackingState.onSync();
-  }
-
-  void expectState(const Buffer &buffer, CmdBufferTrackingState::BufferState state);
+  void expectState(const Buffer &buffer, BufferState state);
   void expectState(const Image &image, uint32_t mip, uint32_t layer, ImageSubresState state);
   void expectState(const Image &image, vk::ImageSubresourceRange range, ImageSubresState state);
   void expectState(const Image &image, ImageSubresState state);
-  
+
+  vk::Result submit(vk::Fence signalFence = {})
+  { 
+    return submit(nullptr, signalFence);
+  }
+  vk::Result submit(const SubmitInfo &info, vk::Fence signalFence = {})
+  { 
+    return submit(&info, signalFence);
+  }
+
 private:
+
+  vk::Result submit(const SubmitInfo *info, vk::Fence signalFence);
 
   void flushBarrier()
   {
@@ -294,10 +122,20 @@ private:
     barrier.flush(*cmd);
   }
 
-  CmdBufferTrackingState trackingState;
-  CmdBarrier barrier;
-  vk::UniqueCommandBuffer cmd;
+  // TODO - add state validation
+  enum class State // https://registry.khronos.org/vulkan/site/spec/latest/chapters/cmdbuffers.html
+  {
+    Initial, // -> begin or free
+    Recording, // -> acquire resources, record commands 
+    Executable, // end()
+    Pending // after submit
+    // Invalid - TODO
+  };
 
+  CmdBufferTrackingState trackingState;
+  tracking::CmdBarrier barrier;
+  vk::UniqueCommandBuffer cmd;
+  State currentState = State::Initial;
 };
 
 

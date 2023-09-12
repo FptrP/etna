@@ -1,7 +1,6 @@
 #include "etna/RenderTargetStates.hpp"
 
 #include "etna/GlobalContext.hpp"
-#include "StateTracking.hpp"
 
 #include <unordered_map>
 #include <variant>

@@ -282,7 +282,7 @@ namespace etna
       {
         state.requestState(
           buffer->buffer,
-          CmdBufferTrackingState::BufferState {
+          BufferState {
             .activeStages = shader_stage_to_pipeline_stage(bindingInfo.stageFlags),
             .activeAccesses = descriptor_type_to_access_flag(bindingInfo.descriptorType)
           });

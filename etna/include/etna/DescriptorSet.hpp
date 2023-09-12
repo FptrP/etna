@@ -7,6 +7,11 @@
 #include "DescriptorSetLayout.hpp"
 #include "BindingItems.hpp"
 
+namespace etna::tracking
+{
+  struct CmdBufferTrackingState;
+}
+
 namespace etna
 {
   struct Binding
@@ -21,8 +26,6 @@ namespace etna
     uint32_t arrayElem;
     std::variant<ImageBinding, BufferBinding> resources;
   };
-
-  struct CmdBufferTrackingState;
 
   /*Maybe we need a hierarchy of descriptor sets*/
   struct DescriptorSet
@@ -54,7 +57,7 @@ namespace etna
       return bindings;
     }
 
-    void requestStates(CmdBufferTrackingState &state) const;
+    void requestStates(tracking::CmdBufferTrackingState &state) const;
   
   private:
     uint64_t generation {};

@@ -1,5 +1,6 @@
 #include <etna/BindingItems.hpp>
 #include <etna/Buffer.hpp>
+#include <etna/GlobalContext.hpp>
 #include <vulkan/vulkan_enums.hpp>
 #include "DebugUtils.hpp"
 
@@ -72,6 +73,9 @@ void Buffer::reset()
 {
   if (!buffer)
     return;
+
+  etna::get_context().getQueueTrackingState()
+    .onResourceDeletion(tracking::to_handle(*this));
 
   if (mapped != nullptr)
     unmap();

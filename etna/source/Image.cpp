@@ -151,6 +151,9 @@ void Image::reset()
   if (!image)
     return;
   
+  etna::get_context().getQueueTrackingState()
+    .onResourceDeletion(tracking::to_handle(*this));
+
   views.clear();
   if (allocator && allocation)
     vmaDestroyImage(allocator, VkImage(image), allocation);

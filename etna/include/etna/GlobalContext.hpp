@@ -9,7 +9,7 @@
 #include <etna/DescriptorSet.hpp>
 #include <etna/Image.hpp>
 #include <etna/Buffer.hpp>
-#include <etna/SyncCommandBuffer.hpp>
+#include <etna/ResourceTracking.hpp>
 
 #include <vk_mem_alloc.h>
 #include <optional>
@@ -17,8 +17,6 @@
 
 namespace etna
 {
-  class ResourceStates;
-
   class GlobalContext
   {
     friend void initialize(const struct InitParams &);
@@ -45,7 +43,6 @@ namespace etna
     GlobalContext &operator=(const GlobalContext&) = delete;
     ~GlobalContext();
 
-    ResourceStates &getResourceTracker();
     QueueTrackingState &getQueueTrackingState();
     
   private:
@@ -70,7 +67,6 @@ namespace etna
     std::optional<PipelineManager> pipelineManager;
     std::optional<DynamicDescriptorPool> descriptorPool;
 
-    std::unique_ptr<ResourceStates> resourceTracking;
     QueueTrackingState queueTracking;
   };
 

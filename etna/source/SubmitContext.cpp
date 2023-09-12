@@ -1,5 +1,6 @@
 #include "etna/SubmitContext.hpp"
 #include "etna/GlobalContext.hpp"
+#include "etna/Etna.hpp"
 
 namespace etna
 {
@@ -197,17 +198,10 @@ namespace etna
     auto device = etna::get_context().getDevice();
     device.waitForFences({*cmdReadyFences[cmdIndex]}, VK_TRUE, ~0ull);
     
-    const uint32_t prevCmdId = (cmdIndex + getFramesInFlight() - 1) % getFramesInFlight();
-    
     auto &cmdBuffer = commandBuffers[cmdIndex];  
-    auto &prevCmd = commandBuffers[prevCmdId];
 
     cmdBuffer.reset();
     
-    etna::get_context().getQueueTrackingState()
-      .setExpectedStates(cmdBuffer.getTrackingState());
-    
-
     device.resetFences({*cmdReadyFences[cmdIndex]});
     cmdAcquired = true;
     
@@ -219,32 +213,25 @@ namespace etna
     ETNA_ASSERTF(!present || currentBackbuffer.has_value(), \
       "Presentation is requested, but backbuffer is not acquired");
     ETNA_ASSERT(cmd.get() == commandBuffers[cmdIndex].get());
-
-    auto queue = etna::get_context().getQueue();
-
-    // Only for present
-    auto waitSemaphores = {*imageAcquireSemaphores[semaphoreIndex]};
-    auto waitStages = {vk::PipelineStageFlags{vk::PipelineStageFlagBits::eAllCommands}};
-    auto signalSemaphores = {*renderFinishedSemaphores[semaphoreIndex]};
     
-    vk::SubmitInfo submit {
-      .commandBufferCount = 1,
-      .pCommandBuffers = &commandBuffers[cmdIndex].get()
+    SubmitInfo submitInfo {
+      .waitSemaphores = {*imageAcquireSemaphores[semaphoreIndex]},
+      .waitDstStageMask = {vk::PipelineStageFlagBits::eAllCommands},
+      .signalSemaphores = {*renderFinishedSemaphores[semaphoreIndex]}
     };
 
     if (present)
     {
-      submit
-        .setWaitSemaphores(waitSemaphores)
-        .setWaitDstStageMask(waitStages)
-        .setSignalSemaphores(signalSemaphores);
+      auto res = commandBuffers[cmdIndex].submit(submitInfo, *cmdReadyFences[cmdIndex]);
+      ETNA_ASSERT(res == vk::Result::eSuccess);
+    } else 
+    {
+      auto res = commandBuffers[cmdIndex].submit(*cmdReadyFences[cmdIndex]);
+      ETNA_ASSERT(res == vk::Result::eSuccess);
     }
-
-    queue.submit({submit}, *cmdReadyFences[cmdIndex]);
-
-    etna::get_context().getQueueTrackingState()
-      .onSubmit(commandBuffers[cmdIndex].getTrackingState());
-
+    
+    etna::flip_descriptor_pool();
+   
     cmdAcquired = false;
     cmdIndex = (cmdIndex + 1) % getFramesInFlight();
 
@@ -258,12 +245,13 @@ namespace etna
         .pImageIndices = &index      
       };
 
-      presentInfo.setWaitSemaphores(signalSemaphores);
+      presentInfo.setWaitSemaphores(submitInfo.signalSemaphores);
       VkPresentInfoKHR cInfo = presentInfo;
 
+      auto queue = etna::get_context().getQueue();
+      
       /*queue.presentKHR asserts on OutOfDate swapchain*/
       auto result = vk::Result(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR(queue, &cInfo));
-      //auto result = queue.presentKHR(presentInfo);
       currentBackbuffer = {};
       semaphoreIndex = (semaphoreIndex + 1) % getBackbuffersCount();
       return from_result(result); //if we are OutOfDate, then state might be completely broken

@@ -1,7 +1,5 @@
 #include <memory>
 
-#include "StateTracking.hpp"
-
 #include <etna/GlobalContext.hpp>
 #include <etna/Etna.hpp>
 #include <vulkan/vulkan_format_traits.hpp>
@@ -62,7 +60,7 @@ namespace etna
     return set;
   }
 
-  Image create_image_from_bytes(ImageCreateInfo info, vk::CommandBuffer command_buffer, const void *data)
+  Image create_image_from_bytes(ImageCreateInfo info, SyncCommandBuffer &command_buffer, const void *data)
   {
     const auto block_size = vk::blockSize(info.format);
     const auto image_size = block_size * info.extent.width * info.extent.height * info.extent.depth;
@@ -78,77 +76,31 @@ namespace etna
     memcpy(mapped_mem, data, image_size);
     staging_buf.unmap();
 
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    vkBeginCommandBuffer(command_buffer, &beginInfo);
-
     info.imageUsage |= vk::ImageUsageFlagBits::eTransferDst;
     auto image = g_context->createImage(ImageCreateInfo{info});
-    etna::set_state(command_buffer, image.get(), vk::PipelineStageFlagBits2::eTransfer,
-      vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eTransferDstOptimal,
-      image.getAspectMaskByFormat());
-    etna::flush_barriers(command_buffer);
 
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
+    command_buffer.begin();
+    command_buffer.copyBufferToImage(staging_buf, image, vk::ImageLayout::eTransferDstOptimal, {
+      vk::BufferImageCopy {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource {image.getAspectMaskByFormat(), 0, 0, 1},
+        .imageOffset {0, 0},
+        .imageExtent = info.extent
+      }
+    });
 
-    region.imageSubresource.aspectMask = (VkImageAspectFlags)image.getAspectMaskByFormat();
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = static_cast<uint32_t>(info.arrayLayers);
+    command_buffer.end();
+    command_buffer.submit();
 
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = info.extent;
-
-    vkCmdCopyBufferToImage(
-        command_buffer,
-        staging_buf.get(),
-        image.get(),
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &region
-    );
-
-    vkEndCommandBuffer(command_buffer);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = (VkCommandBuffer *)&command_buffer;
-
-    vkQueueSubmit(g_context->getQueue(), 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(g_context->getQueue());
-
+    etna::get_context().getQueue().waitIdle();
     staging_buf.reset();
-
     return image;
   }
 
-  /*Todo: submit logic here*/
-  void submit()
+  void flip_descriptor_pool()
   {
     g_context->getDescriptorPool().flip();
-  }
-
-  void set_state(vk::CommandBuffer com_buffer, vk::Image image,
-    vk::PipelineStageFlagBits2 pipeline_stage_flag, vk::AccessFlags2 access_flags,
-    vk::ImageLayout layout, vk::ImageAspectFlags aspect_flags)
-  {
-    etna::get_context().getResourceTracker().setTextureState(com_buffer, image,
-      pipeline_stage_flag, access_flags, layout, aspect_flags);
-  }
-
-  void finish_frame(vk::CommandBuffer com_buffer)
-  {
-    etna::get_context().getResourceTracker().flushBarriers(com_buffer);
-  }
-
-  void flush_barriers(vk::CommandBuffer com_buffer)
-  {
-    etna::get_context().getResourceTracker().flushBarriers(com_buffer);
   }
 }
