@@ -16,7 +16,7 @@ struct ImageCreateInfo
   std::string name;
   vk::ImageType imageType {vk::ImageType::e2D};
   vk::ImageCreateFlags imageFlags{};
-  vk::Format format {vk::Format::eR8G8B8A8Snorm};
+  vk::Format format {vk::Format::eR8G8B8A8Unorm};
   vk::Extent3D extent {1, 1, 1};
   uint32_t mipLevels = 1;
   uint32_t arrayLayers = 1;

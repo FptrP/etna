@@ -162,13 +162,13 @@ namespace etna
 
     const uint32_t framesInFlight = etna::get_context().getNumFramesInFlight();
     
-    auto cmdPool = create_command_pool();
-    std::vector<vk::UniqueCommandBuffer> cmdBuffers = allocate_main_cmd(*cmdPool, framesInFlight); 
+    //auto cmdPool = create_command_pool();
+    //std::vector<vk::UniqueCommandBuffer> cmdBuffers = allocate_main_cmd(*cmdPool, framesInFlight); 
     
-    std::vector<SyncCommandBuffer> syncCmd;
-    syncCmd.reserve(cmdBuffers.size());
-    for (auto &elem : cmdBuffers)
-      syncCmd.emplace_back(std::move(elem));
+    //std::vector<SyncCommandBuffer> syncCmd;
+    //syncCmd.reserve(cmdBuffers.size());
+    //for (auto &elem : cmdBuffers)
+    //  syncCmd.emplace_back(std::move(elem));
 
     std::vector<vk::UniqueFence> cmdFence;
     cmdFence.reserve(framesInFlight);
@@ -183,9 +183,18 @@ namespace etna
     ctx->swapchainImages = std::move(swapchainImages);
     ctx->imageAcquireSemaphores = std::move(acquireSem);
     ctx->renderFinishedSemaphores = std::move(submitSem);
-    ctx->commandPool = std::move(cmdPool);
-    ctx->commandBuffers = std::move(syncCmd);
+    //ctx->commandPool = std::move(cmdPool);
+    //ctx->commandBuffers = std::move(syncCmd);
     ctx->cmdReadyFences = std::move(cmdFence);
+
+    std::vector<SyncCommandBuffer> syncCmd;
+    syncCmd.reserve(framesInFlight);
+
+    for (uint32_t i = 0; i < framesInFlight; i++)
+      syncCmd.emplace_back(ctx->commandPool);
+
+    ctx->commandBuffers = std::move(syncCmd);
+
     return ctx; 
   }
 

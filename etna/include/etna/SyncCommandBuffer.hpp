@@ -9,6 +9,24 @@
 namespace etna
 {
 struct DescriptorSet;
+struct SyncCommandBuffer;
+
+struct CommandBufferPool
+{
+  CommandBufferPool();
+  CommandBufferPool(CommandBufferPool &&) = default;
+  ~CommandBufferPool();
+
+  SyncCommandBuffer allocate();
+
+  vk::UniqueCommandBuffer allocatePrimary();
+  vk::UniqueCommandBuffer allocateSecondary();
+
+private:
+  vk::UniqueCommandPool primaryCmd;
+  vk::UniqueCommandPool secondaryCmd;
+};
+
 
 struct SubmitInfo
 {
@@ -31,7 +49,7 @@ struct RenderingAttachment
 
 struct SyncCommandBuffer
 {
-  SyncCommandBuffer(vk::UniqueCommandBuffer &&cmd_) : cmd{std::move(cmd_)} {}
+  SyncCommandBuffer(CommandBufferPool &pool_);
 
   vk::Result reset();
   vk::Result begin();
@@ -128,14 +146,33 @@ private:
     Initial, // -> begin or free
     Recording, // -> acquire resources, record commands 
     Executable, // end()
+    Rendering, // recording draws
     Pending // after submit
     // Invalid - TODO
   };
 
+  struct RenderInfo
+  {
+    vk::Rect2D renderArea{};
+    std::vector<vk::RenderingAttachmentInfo> colorAttachments;
+    std::optional<vk::RenderingAttachmentInfo> depthAttachment;
+    std::optional<vk::RenderingAttachmentInfo> stencilAttachment;
+
+    RenderInfo(){}
+    RenderInfo(RenderInfo &&) = default;
+    RenderInfo &operator=(RenderInfo &&) = default;
+  };
+  CommandBufferPool &pool;
   CmdBufferTrackingState trackingState;
   tracking::CmdBarrier barrier;
   vk::UniqueCommandBuffer cmd;
+
   State currentState = State::Initial;
+  
+  std::optional<RenderInfo> renderState {};
+  std::optional<vk::UniqueCommandBuffer> renderCmd {};
+  
+  std::vector<vk::UniqueCommandBuffer> usedRenderCmd;
 };
 
 

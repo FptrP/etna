@@ -5,12 +5,63 @@
 
 namespace etna 
 {
+
+
+CommandBufferPool::CommandBufferPool()
+{
+  auto device = etna::get_context().getDevice();
+  vk::CommandPoolCreateInfo info {
+    .queueFamilyIndex = etna::get_context().getQueueFamilyIdx()
+  };
+  
+  info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+
+  primaryCmd = device.createCommandPoolUnique(info).value;
+
+  info.flags = vk::CommandPoolCreateFlags{};
+
+  secondaryCmd = device.createCommandPoolUnique(info).value;
+}
+
+CommandBufferPool::~CommandBufferPool() {}
+
+
+vk::UniqueCommandBuffer CommandBufferPool::allocatePrimary()
+{
+  vk::CommandBufferAllocateInfo info {
+    .commandPool = primaryCmd.get(),
+    .level = vk::CommandBufferLevel::ePrimary,
+    .commandBufferCount = 1
+  };
+
+  auto cmd = std::move(etna::get_context().getDevice().allocateCommandBuffersUnique(info).value[0]);
+  return cmd;
+}
+
+vk::UniqueCommandBuffer CommandBufferPool::allocateSecondary()
+{
+  vk::CommandBufferAllocateInfo info {
+    .commandPool = secondaryCmd.get(),
+    .level = vk::CommandBufferLevel::eSecondary,
+    .commandBufferCount = 1
+  };
+
+  auto cmd = std::move(etna::get_context().getDevice().allocateCommandBuffersUnique(info).value[0]);
+  return cmd;
+}
+
+SyncCommandBuffer::SyncCommandBuffer(CommandBufferPool &pool_)
+  : pool{pool_}, cmd {pool.allocatePrimary()}
+{}
+
 void SyncCommandBuffer::expectState(const Buffer &buffer, BufferState state)
 {
+  ETNA_ASSERT(currentState == State::Recording || currentState == State::Rendering);
   trackingState.expectState(buffer, state);
 }
 void SyncCommandBuffer::expectState(const Image &image, uint32_t mip, uint32_t layer, ImageSubresState state)
 {
+  ETNA_ASSERT(currentState == State::Recording || currentState == State::Rendering);
   trackingState.expectState(image, mip, layer, state);
 }
 
@@ -36,11 +87,15 @@ void SyncCommandBuffer::expectState(const Image &image, ImageSubresState state)
 
 vk::Result SyncCommandBuffer::reset()
 {
+  currentState = State::Initial; 
+  usedRenderCmd.clear();
   return cmd->reset();
 }
 
 vk::Result SyncCommandBuffer::begin()
 {
+  ETNA_ASSERT(currentState == State::Initial);
+  currentState = State::Recording;
   etna::get_context().getQueueTrackingState() //maybe not the best place. Add bufferState
     .setExpectedStates(trackingState);
   return cmd->begin(vk::CommandBufferBeginInfo{});
@@ -48,12 +103,15 @@ vk::Result SyncCommandBuffer::begin()
 
 vk::Result SyncCommandBuffer::end()
 {
+  ETNA_ASSERT(currentState == State::Recording);
+  currentState = State::Executable;
   return cmd->end();
 }
 
 void SyncCommandBuffer::clearColorImage(const Image &image, vk::ImageLayout layout, 
   vk::ClearColorValue clear_color, vk::ArrayProxy<vk::ImageSubresourceRange> ranges)
 {
+  ETNA_ASSERT(currentState == State::Recording);
   ImageSubresState state {
     .activeStages = vk::PipelineStageFlagBits2::eTransfer,
     .activeAccesses = vk::AccessFlagBits2::eTransferWrite,
@@ -74,6 +132,7 @@ void SyncCommandBuffer::clearColorImage(const Image &image, vk::ImageLayout layo
 void SyncCommandBuffer::copyBufferToImage(const Buffer &src, const Image &dst, vk::ImageLayout dstLayout,
   const vk::ArrayProxy<vk::BufferImageCopy> &regions)
 {
+  ETNA_ASSERT(currentState == State::Recording);
   trackingState.requestState(src, BufferState {
     .activeStages = vk::PipelineStageFlagBits2::eTransfer,
     .activeAccesses = vk::AccessFlagBits2::eTransferRead
@@ -103,6 +162,7 @@ void SyncCommandBuffer::copyBufferToImage(const Buffer &src, const Image &dst, v
 void SyncCommandBuffer::transformLayout(const Image &image, vk::ImageLayout layout, 
   vk::ImageSubresourceRange range)
 {
+  ETNA_ASSERT(currentState == State::Recording);
   ImageSubresState state {
     .activeStages = vk::PipelineStageFlags2{},
     .activeAccesses = vk::AccessFlags2{},
@@ -120,16 +180,32 @@ void SyncCommandBuffer::bindDescriptorSet(vk::PipelineBindPoint bind_point,
     const DescriptorSet &set, std::span<const uint32_t> dynamic_offsets)
 {
   set.requestStates(trackingState);
+
+  if (bind_point == vk::PipelineBindPoint::eGraphics)
+  {
+    ETNA_ASSERT(currentState == State::Rendering);
+    renderCmd.value()->bindDescriptorSets(bind_point, layout, set_index, {set.getVkSet()}, dynamic_offsets);
+    return;
+  }
+
+  ETNA_ASSERT(currentState == State::Recording);
   cmd->bindDescriptorSets(bind_point, layout, set_index, {set.getVkSet()}, dynamic_offsets);
 }
 
 void SyncCommandBuffer::bindPipeline(vk::PipelineBindPoint bind_point, const PipelineBase &pipeline)
 {
+  if (bind_point == vk::PipelineBindPoint::eGraphics){
+    ETNA_ASSERT(currentState == State::Rendering);
+    renderCmd.value()->bindPipeline(bind_point, pipeline.getVkPipeline());
+    return;
+  }
+  ETNA_ASSERT(currentState == State::Recording);
   cmd->bindPipeline(bind_point, pipeline.getVkPipeline());
 }
 
 void SyncCommandBuffer::dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z)
 {
+  ETNA_ASSERT(currentState == State::Recording);
   flushBarrier();
   cmd->dispatch(groups_x, groups_y, groups_z);
 }
@@ -142,7 +218,13 @@ void SyncCommandBuffer::pushConstants(ShaderProgramId program, uint32_t offset, 
   ETNA_ASSERTF(constInfo.size > 0, "Shader program {} doesn't have push constants", program);
   ETNA_ASSERTF(offset + size < constInfo.size, "pushConstants: out of range");
 
-  cmd->pushConstants(info.getPipelineLayout(), constInfo.stageFlags, offset, size, data);
+  if (currentState == State::Rendering)
+    renderCmd.value()->pushConstants(info.getPipelineLayout(), constInfo.stageFlags, offset, size, data);
+  else
+  {
+    ETNA_ASSERT(currentState == State::Recording);
+    cmd->pushConstants(info.getPipelineLayout(), constInfo.stageFlags, offset, size, data);
+  }
 }
 
 void SyncCommandBuffer::beginRendering(vk::Rect2D area,
@@ -150,7 +232,10 @@ void SyncCommandBuffer::beginRendering(vk::Rect2D area,
     std::optional<RenderingAttachment> depth_attachment,
     std::optional<RenderingAttachment> stencil_attachment)
 {
+  ETNA_ASSERT(currentState == State::Recording);
+
   std::vector<vk::RenderingAttachmentInfo> colorInfos;
+  std::vector<vk::Format> colorFmt;
 
   for (auto &colorAttachment : color_attachments)
   {
@@ -169,6 +254,7 @@ void SyncCommandBuffer::beginRendering(vk::Rect2D area,
         .layout = colorAttachment.layout
       }); 
 
+    colorFmt.push_back(image.getInfo().format);
     vk::RenderingAttachmentInfo info {
       .imageView = vk::ImageView(colorAttachment.view),
       .imageLayout = colorAttachment.layout,
@@ -181,9 +267,9 @@ void SyncCommandBuffer::beginRendering(vk::Rect2D area,
     colorInfos.push_back(info);
   }
 
+  vk::Format depthFormat {vk::Format::eUndefined};
+  vk::Format stencilFormat {vk::Format::eUndefined};
   std::optional<vk::RenderingAttachmentInfo> depthAttachment;
-  std::optional<vk::RenderingAttachmentInfo> stencilAttachment;
-
   // tricky part. currently barriers don't support separate aspect mask, so 
   // we need to make layout transitions both for depth and stencil
   // For now depth and stencil should point to the same image if used
@@ -208,6 +294,7 @@ void SyncCommandBuffer::beginRendering(vk::Rect2D area,
 
     trackingState.requestState(image, range, ImageSubresState{stages, access, layout});
 
+    depthFormat = image.getInfo().format;
     depthAttachment = vk::RenderingAttachmentInfo {
       .imageView = vk::ImageView(depth_attachment->view),
       .imageLayout = layout,
@@ -222,70 +309,114 @@ void SyncCommandBuffer::beginRendering(vk::Rect2D area,
     ETNA_ASSERTF(false, "Stencil not supported yet :(");
   }
 
-  vk::RenderingInfo renderInfo {
-    .renderArea = area,
-    .layerCount = 1,
-    .viewMask = 0,
-    .pDepthAttachment = depthAttachment.has_value()? &*depthAttachment : nullptr,
-    .pStencilAttachment = stencilAttachment.has_value()? &*stencilAttachment : nullptr
+  renderState.emplace(RenderInfo{});
+  renderState->renderArea = area;
+  renderState->colorAttachments = colorInfos;
+
+  if (depthAttachment.has_value())
+    renderState->depthAttachment.emplace(*depthAttachment);
+
+  renderCmd.emplace(pool.allocateSecondary());
+  
+  vk::CommandBufferInheritanceRenderingInfo secondaryInfo {
+    .colorAttachmentCount = colorFmt.size(),
+    .pColorAttachmentFormats = colorFmt.data(),
+    .depthAttachmentFormat = depthFormat,
+    .stencilAttachmentFormat = stencilFormat
+  };
+  
+  vk::CommandBufferInheritanceInfo inheritanceInfo {
+    .pNext = &secondaryInfo
   };
 
-  renderInfo.setColorAttachments(colorInfos);
+  vk::CommandBufferBeginInfo beginInfo {
+    .flags = vk::CommandBufferUsageFlagBits::eRenderPassContinue,
+    .pInheritanceInfo = &inheritanceInfo
+  };
 
-  flushBarrier();
-  cmd->beginRendering(renderInfo);
+  auto res = renderCmd.value()->begin(beginInfo);
+  ETNA_ASSERT(res == vk::Result::eSuccess);
+  currentState = State::Rendering;
 }
   
 void SyncCommandBuffer::endRendering()
 {
+  ETNA_ASSERT(currentState == State::Rendering);
+  ETNA_ASSERT(renderState.has_value() && renderCmd.has_value());
+
+  renderCmd.value()->end();
+
+  flushBarrier();
+
+  vk::RenderingInfo vkRenderInfo {
+    .flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers,
+    .renderArea = renderState->renderArea,
+    .layerCount = 1,
+    .colorAttachmentCount = renderState->colorAttachments.size(),
+    .pColorAttachments = renderState->colorAttachments.data(),
+    .pDepthAttachment = renderState->depthAttachment.has_value()? &renderState->depthAttachment.value() : nullptr    
+  };
+
+  cmd->beginRendering(vkRenderInfo);
+  cmd->executeCommands({renderCmd.value().get()});
   cmd->endRendering();
+
+  currentState = State::Recording;
+  usedRenderCmd.emplace_back(std::move(renderCmd).value());
 }
 
 void SyncCommandBuffer::bindVertexBuffer(uint32_t binding_index, const Buffer &buffer, vk::DeviceSize offset)
 {
+  ETNA_ASSERT(currentState == State::Rendering);
   trackingState.requestState(buffer, BufferState {
     vk::PipelineStageFlagBits2::eVertexInput,
     vk::AccessFlagBits2::eVertexAttributeRead
   });
 
-  cmd->bindVertexBuffers(binding_index, {buffer.get()}, {offset});
+  renderCmd.value()->bindVertexBuffers(binding_index, {buffer.get()}, {offset});
 }
 
 void SyncCommandBuffer::bindIndexBuffer(const Buffer &buffer, uint32_t offset, vk::IndexType type)
 {
+  ETNA_ASSERT(currentState == State::Rendering);
   trackingState.requestState(buffer, BufferState {
     vk::PipelineStageFlagBits2::eIndexInput,
     vk::AccessFlagBits2::eIndexRead
   });
-  //TODO: check sizes 
-  cmd->bindIndexBuffer(buffer.get(), offset, type);
+
+  renderCmd.value()->bindIndexBuffer(buffer.get(), offset, type);
 }
 
 void SyncCommandBuffer::draw(uint32_t vertex_count, uint32_t instance_count, 
   uint32_t first_vertex, uint32_t first_index)
 {
-  flushBarrier();
-  cmd->draw(vertex_count, instance_count, first_vertex, first_index);
+  ETNA_ASSERT(currentState == State::Rendering);
+  renderCmd.value()->draw(vertex_count, instance_count, first_vertex, first_index);
 }
 
 void SyncCommandBuffer::drawIndexed(uint32_t index_cout, uint32_t instance_count, 
     uint32_t first_index, uint32_t vertex_offset, uint32_t first_instance)
 {
-  flushBarrier();
-  cmd->drawIndexed(index_cout, instance_count, first_index, vertex_offset, first_instance);
+  ETNA_ASSERT(currentState == State::Rendering);
+  renderCmd.value()->drawIndexed(index_cout, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void SyncCommandBuffer::setViewport(uint32_t first_viewport, vk::ArrayProxy<const vk::Viewport> viewports)
 {
-  cmd->setViewport(first_viewport, viewports);
+  ETNA_ASSERT(currentState == State::Rendering);
+  renderCmd.value()->setViewport(first_viewport, viewports);
 }
 void SyncCommandBuffer::setScissor(uint32_t first_scissor, vk::ArrayProxy<const vk::Rect2D> scissors)
 {
-  cmd->setScissor(first_scissor, scissors);
+  ETNA_ASSERT(currentState == State::Rendering);
+  renderCmd.value()->setScissor(first_scissor, scissors);
 }
 
 vk::Result SyncCommandBuffer::submit(const SubmitInfo *info, vk::Fence signalFence)
 {
+  ETNA_ASSERT(currentState = State::Executable);
+  currentState = State::Pending;
+  
   etna::get_context().getQueueTrackingState() // handle error
     .onSubmit(trackingState);
 

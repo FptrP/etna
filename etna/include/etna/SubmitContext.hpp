@@ -38,6 +38,8 @@ namespace etna
     uint32_t getFramesInFlight() const { return commandBuffers.size(); }
     vk::Format getSwapchainFmt() const { return swapchainFormat; }
     
+    CommandBufferPool &getCommandPool() { return commandPool; }
+
   private:
     vk::UniqueSurfaceKHR surface;
     vk::UniqueSwapchainKHR swapchain;
@@ -50,7 +52,8 @@ namespace etna
     std::optional<uint32_t> currentBackbuffer {};
     uint32_t semaphoreIndex = 0u;
 
-    vk::UniqueCommandPool commandPool;
+    //vk::UniqueCommandPool commandPool;
+    CommandBufferPool commandPool;
     std::vector<SyncCommandBuffer> commandBuffers;
     std::vector<vk::UniqueFence> cmdReadyFences;
 

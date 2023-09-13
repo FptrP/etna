@@ -68,7 +68,7 @@ namespace etna
     {
       .size = image_size, 
       .bufferUsage = vk::BufferUsageFlagBits::eTransferSrc,
-      .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY,
+      .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU,
     });
 
     auto *mapped_mem = staging_buf.map();
@@ -82,10 +82,10 @@ namespace etna
     command_buffer.copyBufferToImage(staging_buf, image, vk::ImageLayout::eTransferDstOptimal, {
       vk::BufferImageCopy {
         .bufferOffset = 0,
-        .bufferRowLength = 0,
-        .bufferImageHeight = 0,
+        .bufferRowLength = info.extent.width,
+        .bufferImageHeight = info.extent.height,
         .imageSubresource {image.getAspectMaskByFormat(), 0, 0, 1},
-        .imageOffset {0, 0},
+        .imageOffset {0, 0, 0},
         .imageExtent = info.extent
       }
     });
