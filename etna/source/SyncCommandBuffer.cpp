@@ -108,6 +108,66 @@ vk::Result SyncCommandBuffer::end()
   return cmd->end();
 }
 
+void SyncCommandBuffer::copyBuffer(const Buffer &src, const Buffer &dst,
+  const vk::ArrayProxy<vk::BufferCopy> &regions)
+{
+  ETNA_ASSERT(currentState == State::Recording);
+  
+  trackingState.requestState(src, BufferState {
+    vk::PipelineStageFlagBits2::eTransfer,
+    vk::AccessFlagBits2::eTransferRead
+  }); 
+
+  trackingState.requestState(dst, BufferState {
+    vk::PipelineStageFlagBits2::eTransfer,
+    vk::AccessFlagBits2::eTransferWrite
+  }); 
+
+  flushBarrier();
+  cmd->copyBuffer(src.get(), dst.get(), regions);
+}
+
+void SyncCommandBuffer::blitImage(const Image &src,
+  vk::ImageLayout srcLayout,
+  const Image &dst, vk::ImageLayout dstLayout,
+  const vk::ArrayProxy<vk::ImageBlit> regions,
+  vk::Filter filter)
+{
+  ETNA_ASSERT(currentState == State::Recording);
+
+  for (const auto &region : regions)
+  {
+    vk::ImageSubresourceRange srcRange {
+      .baseMipLevel = region.srcSubresource.mipLevel,
+      .levelCount = 1,
+      .baseArrayLayer = region.srcSubresource.baseArrayLayer,
+      .layerCount = region.srcSubresource.layerCount
+    };
+
+    trackingState.requestState(src, srcRange, ImageSubresState {
+      vk::PipelineStageFlagBits2::eTransfer,
+      vk::AccessFlagBits2::eTransferRead,
+      srcLayout
+    });
+
+    vk::ImageSubresourceRange dstRange {
+      .baseMipLevel = region.dstSubresource.mipLevel,
+      .levelCount = 1,
+      .baseArrayLayer = region.dstSubresource.baseArrayLayer,
+      .layerCount = region.dstSubresource.layerCount
+    };
+
+    trackingState.requestState(dst, dstRange, ImageSubresState {
+      vk::PipelineStageFlagBits2::eTransfer,
+      vk::AccessFlagBits2::eTransferWrite,
+      dstLayout
+    });
+  }
+
+  flushBarrier();
+  cmd->blitImage(src.get(), srcLayout, dst.get(), dstLayout, regions, filter);
+}
+
 void SyncCommandBuffer::clearColorImage(const Image &image, vk::ImageLayout layout, 
   vk::ClearColorValue clear_color, vk::ArrayProxy<vk::ImageSubresourceRange> ranges)
 {
@@ -216,7 +276,7 @@ void SyncCommandBuffer::pushConstants(ShaderProgramId program, uint32_t offset, 
   auto constInfo = info.getPushConst();
   
   ETNA_ASSERTF(constInfo.size > 0, "Shader program {} doesn't have push constants", program);
-  ETNA_ASSERTF(offset + size < constInfo.size, "pushConstants: out of range");
+  ETNA_ASSERTF(offset + size <= constInfo.size, "pushConstants: out of range");
 
   if (currentState == State::Rendering)
     renderCmd.value()->pushConstants(info.getPipelineLayout(), constInfo.stageFlags, offset, size, data);

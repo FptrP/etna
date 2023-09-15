@@ -75,6 +75,15 @@ struct SyncCommandBuffer
     return trackingState;
   }
 
+  void copyBuffer(const Buffer &src, const Buffer &dst,
+    const vk::ArrayProxy<vk::BufferCopy> &regions);
+
+  void blitImage(const Image &src,
+    vk::ImageLayout srcLayout,
+    const Image &dst, vk::ImageLayout dstLayout,
+    const vk::ArrayProxy<vk::ImageBlit> regions,
+    vk::Filter filter);
+
   void clearColorImage(const Image &image, vk::ImageLayout layout, 
     vk::ClearColorValue clear_color, vk::ArrayProxy<vk::ImageSubresourceRange> ranges);
 
@@ -89,6 +98,12 @@ struct SyncCommandBuffer
   void bindPipeline(vk::PipelineBindPoint bind_point, const PipelineBase &pipeline);  
   void dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z);
   void pushConstants(ShaderProgramId program, uint32_t offset, uint32_t size, const void *data);  
+
+  template <typename T>
+  void pushConstants(ShaderProgramId program, uint32_t offset, const T &data)
+  {
+    pushConstants(program, offset, sizeof(T), &data);
+  }
 
   void beginRendering(vk::Rect2D area,
     vk::ArrayProxy<const RenderingAttachment> color_attachments,

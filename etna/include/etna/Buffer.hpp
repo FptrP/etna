@@ -44,12 +44,15 @@ public:
   ~Buffer();
   void reset();
 
+  size_t getSize() const { return size; }
+
 private:
   VmaAllocator allocator{};
 
   VmaAllocation allocation{};
   vk::Buffer buffer{};
   std::byte* mapped{};
+  std::size_t size {0ull};
 };
 
 }

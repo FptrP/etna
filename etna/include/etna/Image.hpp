@@ -98,7 +98,7 @@ public:
   struct ViewParams 
   {
     ViewParams() {}
-
+    //TODO: constructor
     vk::ImageViewType type {vk::ImageViewType::e2D};
     vk::ImageAspectFlags aspect{}; // if empty then select default for image
     uint32_t baseMip = 0;
@@ -119,6 +119,13 @@ public:
   vk::ImageAspectFlags getAspectMaskByFormat() const;
 
   const ImageCreateInfo &getInfo() const { return imageInfo; }
+
+  ViewParams fullRangeView() const {
+    ViewParams p {};
+    p.levelCount = imageInfo.mipLevels;
+    p.layerCount = imageInfo.arrayLayers;
+    return p;
+  }
 
 private:
   struct ViewParamsHasher

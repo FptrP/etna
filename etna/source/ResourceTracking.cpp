@@ -446,8 +446,11 @@ void CmdBufferTrackingState::flushBarrier(CmdBarrier &barrier)
       {
         for (uint32_t mip = 0; mip < imageState->mipLevels; mip++)
         {
-          auto &srcSubres = acquireResource(handle, *imageState, mip, layer);
           auto &dstSubres = imageState->getSubresource(mip, layer);
+          if (!dstSubres.has_value())
+            continue;
+
+          auto &srcSubres = acquireResource(handle, *imageState, mip, layer);
           
           auto imgBarrier = genBarrier(imageState->resource, imageState->aspect, 
             mip, layer, srcSubres, *dstSubres);

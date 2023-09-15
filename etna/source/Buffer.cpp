@@ -9,7 +9,7 @@ namespace etna
 {
 
 Buffer::Buffer(VmaAllocator alloc, CreateInfo info)
-  : allocator{alloc}
+  : allocator{alloc}, size{info.size}
 {
   vk::BufferCreateInfo buf_info{
     .size = info.size,
@@ -46,6 +46,7 @@ void Buffer::swap(Buffer& other)
   std::swap(allocation, other.allocation);
   std::swap(buffer, other.buffer);
   std::swap(mapped, other.mapped);
+  std::swap(size, other.size);
 }
 
 Buffer::Buffer(Buffer&& other) noexcept
@@ -84,6 +85,7 @@ void Buffer::reset()
   allocator = {};
   allocation = {};
   buffer = vk::Buffer{};
+  size = 0;
 }
 
 std::byte* Buffer::map()
