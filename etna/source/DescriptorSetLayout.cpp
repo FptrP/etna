@@ -7,38 +7,32 @@ namespace etna
 {
   void DescriptorSetInfo::addResource(const vk::DescriptorSetLayoutBinding &binding)
   {
-    if (binding.binding > MAX_DESCRIPTOR_BINDINGS)
-      ETNA_PANIC("DescriptorSetInfo: Binding {} out of MAX_DESCRIPTOR_BINDINGS range", binding.binding);
+    uint32_t index = binding.binding;
+    if (index > MAX_DESCRIPTOR_BINDINGS)
+      ETNA_PANIC("DescriptorSetInfo: Binding {} out of MAX_DESCRIPTOR_BINDINGS range", index);
 
-    if (usedBindings.test(binding.binding))
+    if (bindings[index].has_value())
     {
-      auto &src = bindings[binding.binding];
+      auto &src = *bindings[index];
       if (src.descriptorType != binding.descriptorType
         || src.descriptorCount != binding.descriptorCount)
       {
-        ETNA_PANIC("DescriptorSetInfo: incompatible bindings at index {}", binding.binding);
+        ETNA_PANIC("DescriptorSetInfo: incompatible bindings at index {}", index);
       }
 
       src.stageFlags |= binding.stageFlags;
       return;
     }
     
-    usedBindings.set(binding.binding);
-    bindings[binding.binding] = binding;
-
-    if (binding.binding + 1 > maxUsedBinding)
-      maxUsedBinding = binding.binding + 1;
-    if (binding.descriptorType == vk::DescriptorType::eUniformBufferDynamic || binding.descriptorType == vk::DescriptorType::eStorageBufferDynamic)
-      dynOffsets++;
+    bindings[index] = binding;
+    maxUsedBinding = std::max(maxUsedBinding, index + 1);
   }
   
   void DescriptorSetInfo::clear()
   {
     maxUsedBinding = 0;
-    dynOffsets = 0;
-    usedBindings.reset();
     for (auto &binding : bindings)
-      binding = vk::DescriptorSetLayoutBinding {};
+      binding = std::nullopt;
   }
 
   void DescriptorSetInfo::parseShader(vk::ShaderStageFlagBits stage, const SpvReflectDescriptorSet &spv)
@@ -66,17 +60,15 @@ namespace etna
   {
     for (uint32_t binding = 0; binding < info.maxUsedBinding; binding++)
     {
-      if (!info.usedBindings.test(binding))
+      if (!info.bindings[binding].has_value())
         continue;
-      addResource(info.bindings[binding]);
+      addResource(*info.bindings[binding]);
     }
   }
 
   bool DescriptorSetInfo::operator==(const DescriptorSetInfo &rhs) const
   {
     if (maxUsedBinding != rhs.maxUsedBinding)
-      return false;
-    if (usedBindings != rhs.usedBindings)
       return false;
     
     for (uint32_t i = 0; i < maxUsedBinding; i++)
@@ -93,9 +85,9 @@ namespace etna
     std::vector<vk::DescriptorSetLayoutBinding> apiBindings;
     for (uint32_t i = 0; i < maxUsedBinding; i++)
     {
-      if (!usedBindings.test(i))
+      if (!bindings[i].has_value())
         continue;
-      apiBindings.push_back(bindings[i]);
+      apiBindings.push_back(*bindings[i]);
     }
 
     vk::DescriptorSetLayoutCreateInfo info {};
@@ -117,13 +109,13 @@ namespace etna
 
     for (uint32_t i = 0; i < res.maxUsedBinding; i++)
     {
-      if (!res.usedBindings.test(i))
+      if (!res.bindings[i].has_value())
         continue;
         
-      hash_combine(hash, res.bindings[i].binding);
-      hash_combine(hash, static_cast<uint32_t>(res.bindings[i].descriptorType));
-      hash_combine(hash, res.bindings[i].descriptorCount);
-      hash_combine(hash, static_cast<uint32_t>(res.bindings[i].stageFlags));
+      hash_combine(hash, res.bindings[i]->binding);
+      hash_combine(hash, static_cast<uint32_t>(res.bindings[i]->descriptorType));
+      hash_combine(hash, res.bindings[i]->descriptorCount);
+      hash_combine(hash, static_cast<uint32_t>(res.bindings[i]->stageFlags));
     }
 
     return hash;

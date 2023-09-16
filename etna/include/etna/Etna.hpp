@@ -41,7 +41,9 @@ namespace etna
   
   void flip_descriptor_pool();
 
-  ShaderProgramId create_program(const std::string &name, const std::vector<std::string> &shaders_path);
+  ShaderProgramId create_program(const std::string &name,
+    const std::vector<std::string> &shaders_path,
+    const PatchCB &patchCB = {});
   
   /*
     Reload shader files. Warning:

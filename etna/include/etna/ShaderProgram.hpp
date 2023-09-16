@@ -11,7 +11,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
-
+#include <functional>
 
 namespace etna
 {
@@ -40,6 +40,8 @@ namespace etna
     /*Todo: add vertex input info*/
   };
 
+  using PatchCB = std::function<void(std::array<std::optional<DescriptorSetInfo>, MAX_PROGRAM_DESCRIPTORS>&)>;
+
   struct ShaderProgramInfo
   {
     ShaderProgramId getId() const { return id; }
@@ -67,7 +69,9 @@ namespace etna
     ShaderProgramManager() {}
     ~ShaderProgramManager() { clear(); }
 
-    ShaderProgramId loadProgram(const std::string &name, const std::vector<std::string> &shaders_path);
+    ShaderProgramId loadProgram(const std::string &name, const std::vector<std::string> &shaders_path, 
+      const PatchCB &cb = {});
+
     ShaderProgramId getProgram(const std::string &name) const;
 
     ShaderProgramInfo getProgramInfo(ShaderProgramId id) const
@@ -108,7 +112,8 @@ namespace etna
 
     struct ShaderProgramInternal
     {
-      ShaderProgramInternal(std::string name_, std::vector<uint32_t> &&mod) : name(std::move(name_)), moduleIds {std::move(mod)} {}
+      ShaderProgramInternal(std::string name_, std::vector<uint32_t> &&mod, const PatchCB &cb) 
+        : name(std::move(name_)), moduleIds {std::move(mod)}, patchCB{cb} {}
 
       std::string name;
       std::vector<uint32_t> moduleIds;
@@ -118,6 +123,8 @@ namespace etna
     
       vk::PushConstantRange pushConst {};
       vk::UniquePipelineLayout progLayout;
+
+      PatchCB patchCB {};
 
       void reload(ShaderProgramManager &manager);
     };

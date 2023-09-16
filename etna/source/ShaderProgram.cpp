@@ -146,7 +146,10 @@ namespace etna
     }
   }
 
-  ShaderProgramId ShaderProgramManager::loadProgram(const std::string &name, const std::vector<std::string> &shaders_path)
+  ShaderProgramId ShaderProgramManager::loadProgram(
+    const std::string &name,
+    const std::vector<std::string> &shaders_path,
+    const PatchCB &cb)
   {
     if (programNames.find(name) != programNames.end())
       ETNA_PANIC("Shader program ", name, " redefenition");
@@ -165,7 +168,7 @@ namespace etna
     validate_program_shaders(name, stages);
 
     ShaderProgramId progId = static_cast<ShaderProgramId>(programs.size());
-    programs.emplace_back(new ShaderProgramInternal {name, std::move(moduleIds)});
+    programs.emplace_back(new ShaderProgramInternal {name, std::move(moduleIds), cb});
     programs[progId]->reload(*this);
     programNames[name] = progId;
     return progId;
@@ -185,7 +188,7 @@ namespace etna
     usedDescriptors = {};
     pushConst = vk::PushConstantRange {};
 
-    std::array<DescriptorSetInfo, MAX_PROGRAM_DESCRIPTORS> dstDescriptors;
+    std::array<std::optional<DescriptorSetInfo>, MAX_PROGRAM_DESCRIPTORS> dstDescriptors;
     auto &descriptorLayoutCache = get_context().getDescriptorSetLayouts();
 
     for (auto id : moduleIds)
@@ -212,18 +215,30 @@ namespace etna
         if (desc.first >= MAX_PROGRAM_DESCRIPTORS)
           ETNA_PANIC("ShaderProgram {} : set {} out of max sets ({})", name, desc.first, MAX_PROGRAM_DESCRIPTORS);
 
-        usedDescriptors.set(desc.first);
-        dstDescriptors[desc.first].merge(desc.second);
+        //usedDescriptors.set(desc.first);
+        if (dstDescriptors[desc.first].has_value())
+          dstDescriptors[desc.first]->merge(desc.second);
+        else 
+          dstDescriptors[desc.first] = desc.second;
       }
     }
 
+    if (patchCB)
+      patchCB(dstDescriptors); 
+
+    for (uint32_t i = 0; i < MAX_PROGRAM_DESCRIPTORS; i++)
+    {  
+      if (dstDescriptors[i].has_value())
+        usedDescriptors.set(i);
+    }
+    
     std::vector<vk::DescriptorSetLayout> vkLayouts;
 
     for (uint32_t i = 0; i < MAX_PROGRAM_DESCRIPTORS; i++)
     {
       if (!usedDescriptors.test(i))
         continue;
-      auto res = descriptorLayoutCache.get(get_context().getDevice(), dstDescriptors[i]);
+      auto res = descriptorLayoutCache.get(get_context().getDevice(), *dstDescriptors[i]);
       descriptorIds[i] = res.first;
       vkLayouts.push_back(res.second);
     }

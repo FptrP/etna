@@ -30,9 +30,9 @@ namespace etna
     g_context.reset(nullptr);
   }
 
-  ShaderProgramId create_program(const std::string &name, const std::vector<std::string> &shaders_path)
+  ShaderProgramId create_program(const std::string &name, const std::vector<std::string> &shaders_path, const PatchCB &patchCB)
   {
-    return g_context->getShaderManager().loadProgram(name, shaders_path);
+    return g_context->getShaderManager().loadProgram(name, shaders_path, patchCB);
   }
 
   void reload_shaders()

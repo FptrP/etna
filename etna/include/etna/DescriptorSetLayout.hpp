@@ -8,7 +8,7 @@
 #include <bitset>
 #include <vector>
 #include <unordered_map>
-
+#include <optional>
 
 struct SpvReflectDescriptorSet;
 
@@ -33,21 +33,25 @@ namespace etna
 
     bool isBindingUsed(uint32_t binding) const
     {
-      return binding < maxUsedBinding && usedBindings.test(binding);  
+      return binding < maxUsedBinding && bindings[binding].has_value();  
     }
 
     const vk::DescriptorSetLayoutBinding &getBinding(uint32_t binding) const
     {
       ETNA_ASSERT(isBindingUsed(binding));
-      return bindings.at(binding);
+      return *bindings.at(binding);
+    }
+
+    void patchBinding(vk::DescriptorSetLayoutBinding info)
+    {
+      ETNA_ASSERT(info.binding < MAX_DESCRIPTOR_BINDINGS);
+      maxUsedBinding = std::max(maxUsedBinding, info.binding + 1);
+      bindings[info.binding] = info;
     }
 
   private:
     uint32_t maxUsedBinding = 0;
-    uint32_t dynOffsets = 0;
-
-    std::bitset<MAX_DESCRIPTOR_BINDINGS> usedBindings {};
-    std::array<vk::DescriptorSetLayoutBinding, MAX_DESCRIPTOR_BINDINGS> bindings {};
+    std::array<std::optional<vk::DescriptorSetLayoutBinding>, MAX_DESCRIPTOR_BINDINGS> bindings {};
 
     friend DescriptorSetLayoutHash;
   };
