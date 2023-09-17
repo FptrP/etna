@@ -23,7 +23,7 @@ public:
 
   ShaderProgramId getShaderProgram() const
   {
-    return id;
+    return shaderProgramId;
   }
 
 protected:

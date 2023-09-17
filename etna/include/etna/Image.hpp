@@ -78,7 +78,7 @@ private:
 class Image
 {
 public:
-
+  Image() = default;
   Image(VmaAllocator alloc, ImageCreateInfo &&info);
   Image(vk::Image apiImage, ImageCreateInfo &&info); // for swapchain images
 
@@ -93,6 +93,8 @@ public:
 
   ~Image();
   void reset();
+
+  explicit operator bool() const { return bool(image); }
 
   // Missed view features: format reintepretation  
   struct ViewParams 

@@ -50,6 +50,11 @@ vk::UniqueCommandBuffer CommandBufferPool::allocateSecondary()
   return cmd;
 }
 
+SyncCommandBuffer CommandBufferPool::allocate()
+{
+  return {*this};
+}
+
 SyncCommandBuffer::SyncCommandBuffer(CommandBufferPool &pool_)
   : pool{pool_}, cmd {pool.allocatePrimary()}
 {}

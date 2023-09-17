@@ -21,7 +21,9 @@ namespace etna
   {
     SimpleSubmitContext(const SimpleSubmitContext &) = delete;
     SimpleSubmitContext &operator=(const SimpleSubmitContext &) = delete;
-
+    SimpleSubmitContext(SimpleSubmitContext &&) = delete;
+    SimpleSubmitContext &operator=(SimpleSubmitContext &&) = delete;
+    
     ~SimpleSubmitContext();
 
     SyncCommandBuffer &acquireNextCmd();    
