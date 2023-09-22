@@ -132,6 +132,19 @@ void SyncCommandBuffer::copyBuffer(const Buffer &src, const Buffer &dst,
   cmd->copyBuffer(src.get(), dst.get(), regions);
 }
 
+void SyncCommandBuffer::fillBuffer(const Buffer &dst, vk::DeviceSize offset, vk::DeviceSize size, uint32_t data)
+{
+  ETNA_ASSERT(currentState == State::Recording);
+
+  trackingState.requestState(dst, BufferState {
+    vk::PipelineStageFlagBits2::eTransfer,
+    vk::AccessFlagBits2::eTransferWrite
+  }); 
+
+  flushBarrier();
+  cmd->fillBuffer(dst.get(), offset, size, data);
+}
+
 void SyncCommandBuffer::blitImage(const Image &src,
   vk::ImageLayout srcLayout,
   const Image &dst, vk::ImageLayout dstLayout,

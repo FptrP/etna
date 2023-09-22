@@ -78,6 +78,8 @@ struct SyncCommandBuffer
   void copyBuffer(const Buffer &src, const Buffer &dst,
     const vk::ArrayProxy<vk::BufferCopy> &regions);
 
+  void fillBuffer(const Buffer &dst, vk::DeviceSize offset, vk::DeviceSize size, uint32_t data);
+
   void blitImage(const Image &src,
     vk::ImageLayout srcLayout,
     const Image &dst, vk::ImageLayout dstLayout,
