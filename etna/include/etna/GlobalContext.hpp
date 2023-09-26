@@ -27,6 +27,7 @@ namespace etna
     Image createImage(ImageCreateInfo &&info);
     Buffer createBuffer(Buffer::CreateInfo info);
 
+    vk::DynamicLoader& getLoader() { return dl; }
     vk::Device getDevice() const { return vkDevice.get(); }
     vk::PhysicalDevice getPhysicalDevice() const { return vkPhysDevice; }
     vk::Instance getInstance() const { return vkInstance.get(); }
@@ -46,6 +47,7 @@ namespace etna
     QueueTrackingState &getQueueTrackingState();
     
   private:
+    vk::DynamicLoader dl;
     vk::UniqueInstance vkInstance {};
     vk::UniqueDebugUtilsMessengerEXT vkDebugCallback {};
     vk::PhysicalDevice vkPhysDevice {};

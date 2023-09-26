@@ -289,7 +289,7 @@ namespace etna
     return {nullptr, state};
   }
     
-  void SimpleSubmitContext::recreateSwapchain(vk::Extent2D resolution)
+  vk::Extent2D SimpleSubmitContext::recreateSwapchain(vk::Extent2D resolution)
   {
     swapchain.reset();
     swapchainImages.clear();
@@ -310,6 +310,7 @@ namespace etna
     swapchainImages = get_swapchain_images(*swapchain, *swapchainInfo); 
     swapchainFormat = swapchainInfo->imageFmt;
     ETNA_ASSERT(swapchainImages.size() == imageAcquireSemaphores.size()); //Recreate semaphores?
+    return swapchainInfo->params.currentExtent;
   }
 
 }

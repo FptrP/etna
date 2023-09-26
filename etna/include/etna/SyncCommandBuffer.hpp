@@ -60,6 +60,12 @@ struct SyncCommandBuffer
     return *cmd;
   }
 
+  vk::CommandBuffer getRenderCmd() const 
+  {
+    ETNA_ASSERT(currentState == State::Rendering && renderCmd.has_value());
+    return renderCmd->get();
+  }
+
   const vk::CommandBuffer &get() const
   {
     return *cmd;

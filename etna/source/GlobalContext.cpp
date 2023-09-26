@@ -230,7 +230,6 @@ namespace etna
     // 1) load version-independent symbols
     // 2) load device-independent symbols
     // 3) load device-specific symbols
-    vk::DynamicLoader dl;
     VULKAN_HPP_DEFAULT_DISPATCHER.init(
       dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
     

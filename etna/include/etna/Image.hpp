@@ -121,6 +121,7 @@ public:
   vk::ImageAspectFlags getAspectMaskByFormat() const;
 
   const ImageCreateInfo &getInfo() const { return imageInfo; }
+  vk::Extent2D getExtent2D() const { return {imageInfo.extent.width, imageInfo.extent.height}; }
 
   ViewParams fullRangeView() const {
     ViewParams p {};

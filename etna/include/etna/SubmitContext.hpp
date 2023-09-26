@@ -31,7 +31,7 @@ namespace etna
     SwapchainState submitCmd(SyncCommandBuffer &cmd, bool present);
     std::tuple<Image*, SwapchainState> acquireBackbuffer(); // image is nullptr if SwapchainState is OutOfDate
     
-    void recreateSwapchain(vk::Extent2D resolution); // 1) synchoronization required
+    vk::Extent2D recreateSwapchain(vk::Extent2D resolution); // 1) synchoronization required
                                                      // 2) resources that depend on swapchain images
                                                      // (framebuffers, imageViews) must be destroyed
 
