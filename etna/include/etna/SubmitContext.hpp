@@ -71,11 +71,13 @@ namespace etna
 
     friend std::unique_ptr<SimpleSubmitContext> create_submit_context(
       vk::SurfaceKHR surface, 
-      vk::Extent2D windowSize
+      vk::Extent2D windowSize,
+      bool force_srgb
     );
   };
 
-  std::unique_ptr<SimpleSubmitContext> create_submit_context(vk::SurfaceKHR surface, vk::Extent2D windowSize);
+  std::unique_ptr<SimpleSubmitContext> create_submit_context(
+    vk::SurfaceKHR surface, vk::Extent2D windowSize, bool force_srgb);
 
 }
 

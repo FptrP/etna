@@ -11,7 +11,24 @@ namespace etna
     vk::SurfaceCapabilitiesKHR params;
   };
 
-  static std::optional<SwapchainParams> query_swapchain_support(vk::SurfaceKHR surface)
+  static bool isSRGBFmt(vk::Format fmt)
+  {
+    switch (fmt)
+    {
+    case vk::Format::eR8Srgb:
+    case vk::Format::eR8G8Srgb:
+    case vk::Format::eB8G8R8Srgb:
+    case vk::Format::eR8G8B8A8Srgb:
+    case vk::Format::eB8G8R8A8Srgb:
+      return true;
+    default:
+      break;
+    }
+
+    return false;
+  }
+
+  static std::optional<SwapchainParams> query_swapchain_support(vk::SurfaceKHR surface, bool force_srgb)
   {
     auto physicalDevice = etna::get_context().getPhysicalDevice();
     auto [status, surfaceSupport] = physicalDevice.getSurfaceSupportKHR(
@@ -23,11 +40,23 @@ namespace etna
     auto caps = physicalDevice.getSurfaceCapabilitiesKHR(surface).value;
     auto supportedFormats = physicalDevice.getSurfaceFormatsKHR(surface).value;
 
+    uint32_t fmtIndex = 0;
+
+    if (force_srgb)
+    {
+      auto it = std::find_if(supportedFormats.begin(), supportedFormats.end(), [](const auto &v) {
+        return isSRGBFmt(v.format) &&  v.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+      });
+
+      ETNA_ASSERT(it != supportedFormats.end());
+      fmtIndex = std::distance(supportedFormats.begin(), it);
+    }
+
     ETNA_ASSERT(supportedFormats.size() > 0);
 
     return SwapchainParams {
-      .imageFmt = supportedFormats.at(0).format,
-      .colorSpace = supportedFormats.at(0).colorSpace,
+      .imageFmt = supportedFormats.at(fmtIndex).format,
+      .colorSpace = supportedFormats.at(fmtIndex).colorSpace,
       .params = caps
     };
   }
@@ -36,6 +65,8 @@ namespace etna
   {
     auto device = etna::get_context().getDevice();
     
+    auto usageFlags = ImageCreateInfo::imageUsageFromFmt(params.imageFmt, false);
+
     vk::SwapchainCreateInfoKHR info {
       .surface = surface,
       .minImageCount = params.params.minImageCount,
@@ -43,7 +74,7 @@ namespace etna
       .imageColorSpace = params.colorSpace,
       .imageExtent = params.params.currentExtent,
       .imageArrayLayers = 1,
-      .imageUsage = params.params.supportedUsageFlags,
+      .imageUsage = params.params.supportedUsageFlags & usageFlags,
       .imageSharingMode = vk::SharingMode::eExclusive,
       .preTransform = params.params.currentTransform,
       .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
@@ -134,9 +165,9 @@ namespace etna
     etna::get_context().getDevice().waitIdle();
   }
 
-  std::unique_ptr<SimpleSubmitContext> create_submit_context(vk::SurfaceKHR surface, vk::Extent2D windowSize)
+  std::unique_ptr<SimpleSubmitContext> create_submit_context(vk::SurfaceKHR surface, vk::Extent2D windowSize, bool force_srgb)
   {
-    auto swapchainInfo = query_swapchain_support(surface);
+    auto swapchainInfo = query_swapchain_support(surface, force_srgb);
     ETNA_ASSERTF(swapchainInfo, "Vulkan device does not support swapchain");
     
     // with wayland window is not displayed until first draw and currentExtent is zero
@@ -288,16 +319,19 @@ namespace etna
 
     return {nullptr, state};
   }
-    
+  
   vk::Extent2D SimpleSubmitContext::recreateSwapchain(vk::Extent2D resolution)
   {
+    // TODO: fix 
+    bool forceSRGB = isSRGBFmt(getSwapchainFmt());
+
     swapchain.reset();
     swapchainImages.clear();
 
     if (currentBackbuffer) //Suboptimal on acquire. Maybe add warning if cmdAcquired?
       currentBackbuffer = {};
 
-    auto swapchainInfo = query_swapchain_support(*surface);
+    auto swapchainInfo = query_swapchain_support(*surface, forceSRGB);
     ETNA_ASSERT(swapchainInfo.has_value());
     
     if (!swapchainInfo->params.currentExtent.width && !swapchainInfo->params.currentExtent.height)
